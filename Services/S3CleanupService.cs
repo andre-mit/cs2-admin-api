@@ -21,10 +21,21 @@ namespace Cs2Admin.API.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
-                await CleanupOrphanedUploads();
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    await Task.Delay(TimeSpan.FromHours(12), stoppingToken);
+                    await CleanupOrphanedUploads();
+                }
+            }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogWarning(ex, "S3 Cleanup Service was cancelled");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "S3 Cleanup Service failed");
             }
         }
 
