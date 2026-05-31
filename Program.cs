@@ -1,4 +1,5 @@
 using Cs2Admin.API.Data;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Cs2Admin.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -90,17 +91,22 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.UseCors("AllowAll");
+    app.UseHttpsRedirection();
 }
 else 
 {
     app.UseCors("ProductionPolicy");
 }
 
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
