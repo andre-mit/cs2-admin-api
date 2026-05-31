@@ -79,6 +79,7 @@ services:
       - Jwt__Audience=${JWT_AUDIENCE:-cs2-admin-client}
 
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
     restart: unless-stopped
 
 ```
