@@ -31,7 +31,7 @@ This is the RESTful backend for the CS2 administration panel. Built with ASP.NET
      "Redis": {
        "ConnectionString": "localhost:6379"
      },
-     "AWS": {
+     "S3": {
        "AccessKey": "...",
        "SecretKey": "...",
        "BucketName": "...",
