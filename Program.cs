@@ -85,6 +85,8 @@ builder.Services.AddHostedService<S3CleanupService>();
 
 builder.Services.AddControllers();
 
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -103,6 +105,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<LobbyHub>("/hubs/lobby");
-
+app.MapHealthChecks("/health");
 
 app.Run();

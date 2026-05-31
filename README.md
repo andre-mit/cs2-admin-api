@@ -56,6 +56,33 @@ This is the RESTful backend for the CS2 administration panel. Built with ASP.NET
    ```
 The Swagger UI will be available at `http://localhost:<port>/swagger` in the development environment.
 
+## Use latest Docker Image
+
+```yaml
+services:
+  cs2admin-api:
+    image: ghcr.io/andre-mit/cs2-admin-api:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - ConnectionStrings__DefaultConnection=${DB_CONNECTION_STRING}
+
+      - S3__ServiceUrl=${S3_URL}
+      - S3__AccessKey=${S3_ACCESS_KEY}
+      - S3__SecretKey=${S3_SECRET_KEY}
+      - S3__BucketName=${S3_BUCKET_NAME}
+
+      - Redis__ConnectionString=${REDIS_CONNECTION}
+
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER:-cs2-admin}
+      - Jwt__Audience=${JWT_AUDIENCE:-cs2-admin-client}
+
+      - ASPNETCORE_ENVIRONMENT=Production
+    restart: unless-stopped
+
+```
+
 ## Next Steps (Suggested Improvements)
 
 - **Layered Architecture:** Implement the Repository and Unit of Work patterns to isolate the `DbContext` (EF Core) from the Controllers.
