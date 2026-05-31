@@ -7,8 +7,11 @@ using Cs2Admin.API.Models;
 using System.Text.Json;
 using System.Linq;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace Cs2Admin.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
     public class LobbiesController : ControllerBase
@@ -42,6 +45,20 @@ namespace Cs2Admin.API.Controllers
             _context.Lobbies.Add(lobby);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetLobby), new { id = lobby.Id }, lobby);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteLobby(int id)
+        {
+            var lobby = await _context.Lobbies.FindAsync(id);
+            if (lobby == null) return NotFound();
+
+            await _hubContext.Clients.Group($"Lobby_{id}").SendAsync("LobbyDeleted");
+
+            _context.Lobbies.Remove(lobby);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
         public class JoinRequest

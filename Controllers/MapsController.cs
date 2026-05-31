@@ -4,8 +4,11 @@ using Cs2Admin.API.Data;
 using Cs2Admin.API.Models;
 using StackExchange.Redis;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace Cs2Admin.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
     public class MapsController : ControllerBase

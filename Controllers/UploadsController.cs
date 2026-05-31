@@ -9,8 +9,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using StackExchange.Redis;
 
+using Microsoft.AspNetCore.Authorization;
+
 namespace Cs2Admin.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
     public class UploadsController : ControllerBase

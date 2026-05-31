@@ -37,10 +37,8 @@ This is the RESTful backend for the CS2 administration panel. Built with ASP.NET
        "BucketName": "...",
        "Region": "us-east-1"
      },
-     "Jwt": {
-       "Key": "a_super_secret_key_with_at_least_32_characters",
-       "Issuer": "cs2-admin",
-       "Audience": "cs2-admin-client"
+     "JwtSettings": {
+       "SecretKey": "a_super_secret_key_with_at_least_32_characters"
      }
    }
    ```
@@ -74,9 +72,7 @@ services:
 
       - Redis__ConnectionString=${REDIS_CONNECTION}
 
-      - Jwt__Key=${JWT_KEY}
-      - Jwt__Issuer=${JWT_ISSUER:-cs2-admin}
-      - Jwt__Audience=${JWT_AUDIENCE:-cs2-admin-client}
+      - JwtSettings__SecretKey=${JWT_SECRET}
 
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:8080
