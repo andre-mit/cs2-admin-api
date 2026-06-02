@@ -83,13 +83,14 @@ namespace Cs2Admin.API.Controllers
             }
             else
             {
+                bool isFirstInTeam = req.TeamDesignation != 0 && !lobby.Players.Any(p => p.TeamDesignation == req.TeamDesignation);
                 lobby.Players.Add(new LobbyPlayer
                 {
                     SteamId = req.SteamId,
                     Name = req.Name,
                     AvatarUrl = req.AvatarUrl,
                     TeamDesignation = req.TeamDesignation,
-                    IsCaptain = false 
+                    IsCaptain = isFirstInTeam 
                 });
             }
 
@@ -108,9 +109,28 @@ namespace Cs2Admin.API.Controllers
             var random = new Random();
             var shuffled = activePlayers.OrderBy(x => random.Next()).ToList();
 
+            bool team1HasCaptain = false;
+            bool team2HasCaptain = false;
+
             for (int i = 0; i < shuffled.Count; i++)
             {
-                shuffled[i].TeamDesignation = (i % 2) + 1;
+                var targetTeam = (i % 2) + 1;
+                shuffled[i].TeamDesignation = targetTeam;
+                
+                if (targetTeam == 1 && !team1HasCaptain)
+                {
+                    shuffled[i].IsCaptain = true;
+                    team1HasCaptain = true;
+                }
+                else if (targetTeam == 2 && !team2HasCaptain)
+                {
+                    shuffled[i].IsCaptain = true;
+                    team2HasCaptain = true;
+                }
+                else
+                {
+                    shuffled[i].IsCaptain = false;
+                }
             }
 
             await _context.SaveChangesAsync();
