@@ -8,6 +8,9 @@ namespace Cs2Admin.API.Models
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
         
+        public string Team1Name { get; set; } = "Team 1";
+        public string Team2Name { get; set; } = "Team 2";
+        
         // Waiting, Veto, Ready
         public string State { get; set; } = "Waiting";
         

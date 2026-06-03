@@ -152,6 +152,23 @@ namespace Cs2Admin.API.Controllers
             return Ok(lobby);
         }
         
+        public class TeamNameRequest { public int TeamDesignation { get; set; } public string Name { get; set; } = ""; }
+
+        [HttpPut("{id}/teamname")]
+        public async Task<IActionResult> UpdateTeamName(int id, [FromBody] TeamNameRequest req)
+        {
+            var lobby = await _context.Lobbies.Include(l => l.Players).FirstOrDefaultAsync(l => l.Id == id);
+            if (lobby == null) return NotFound();
+
+            if (req.TeamDesignation == 1) lobby.Team1Name = req.Name;
+            else if (req.TeamDesignation == 2) lobby.Team2Name = req.Name;
+            else return BadRequest("Invalid team designation");
+
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients.Group($"Lobby_{id}").SendAsync("LobbyUpdated", lobby);
+            return Ok(lobby);
+        }
+        
         public class VetoRequest { public string Map { get; set; } = ""; public string Action { get; set; } = ""; }
 
         [HttpPost("{id}/veto")]
@@ -208,8 +225,8 @@ namespace Cs2Admin.API.Controllers
             var matchConfig = new
             {
                 matchid = lobby.Id,
-                team1 = new { name = "Team A", players = team1Players },
-                team2 = new { name = "Team B", players = team2Players },
+                team1 = new { name = lobby.Team1Name, players = team1Players },
+                team2 = new { name = lobby.Team2Name, players = team2Players },
                 num_maps = lobby.MaxMaps,
                 maplist = selected,
                 map_sides = mapSides,
