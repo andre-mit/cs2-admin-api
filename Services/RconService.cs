@@ -4,16 +4,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using CoreRCON;
+using Cs2Admin.API.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
 
 namespace Cs2Admin.API.Services
 {
-    public interface IRconService
-    {
-        Task<string> SendCommandAsync(string ip, int port, string password, string command);
-    }
-
     public class RconService : IRconService
     {
         private readonly ILogger<RconService> _logger;

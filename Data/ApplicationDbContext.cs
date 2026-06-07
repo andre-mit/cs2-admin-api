@@ -18,6 +18,8 @@ namespace Cs2Admin.API.Data
         public DbSet<Lobby> Lobbies { get; set; }
         public DbSet<LobbyPlayer> LobbyPlayers { get; set; }
         public DbSet<GameMap> Maps { get; set; }
+        
+        public DbSet<SteamServerToken> SteamServerTokens { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

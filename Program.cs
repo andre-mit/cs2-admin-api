@@ -7,6 +7,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Cs2Admin.API.Hubs;
 using Amazon.S3;
+using Cs2Admin.API;
+using Cs2Admin.API.Configurations;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,7 +68,6 @@ builder.Services.AddCors(options =>
                   .AllowCredentials();
         });
 });
-builder.Services.AddScoped<IRconService, RconService>();
 
 var s3Config = new AmazonS3Config
 {
@@ -82,11 +83,13 @@ builder.Services.AddSingleton<IAmazonS3>(new AmazonS3Client(
 var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
 
-builder.Services.AddHostedService<S3CleanupService>();
 
 builder.Services.AddControllers();
 
 builder.Services.AddHealthChecks();
+
+builder.Services.Configure<ServersConfiguration>(builder.Configuration.GetSection("ServersConfiguration"));
+builder.Services.AddServices(builder.Configuration);
 
 var app = builder.Build();
 
