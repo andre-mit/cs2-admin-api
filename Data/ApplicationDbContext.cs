@@ -20,6 +20,8 @@ namespace Cs2Admin.API.Data
         public DbSet<GameMap> Maps { get; set; }
         
         public DbSet<SteamServerToken> SteamServerTokens { get; set; }
+        public DbSet<GamePlugin> GamePlugins { get; set; }
+        public DbSet<ServerPlugin> ServerPlugins { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -37,6 +39,10 @@ namespace Cs2Admin.API.Data
                 .WithMany()
                 .HasForeignKey(m => m.Team2Id)
                 .OnDelete(DeleteBehavior.Restrict);
+                
+            modelBuilder.Entity<ServerPlugin>()
+                .HasIndex(sp => new { sp.ServerId, sp.GamePluginId })
+                .IsUnique();
         }
     }
 }

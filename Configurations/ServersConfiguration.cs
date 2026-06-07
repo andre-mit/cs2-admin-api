@@ -3,7 +3,9 @@ namespace Cs2Admin.API.Configurations;
 public class ServersConfiguration
 {
     public string GameBaseDir { get; set; } = "/var/lib/cs2-base";
-    public string ServersBaseDir { get; set; } = "/var/lib/cs2-instances/";
+    public string ServersBaseDir { get; set; } = "/var/lib/cs2-instances";
+    public string PluginsBaseDir { get; set; } = "/var/lib/cs2-plugins";
+    
     public NetworkConfiguration Network { get; set; } = new NetworkConfiguration();
 
     public Dictionary<string, string> DefaultEnvVariables { get; set; } = [];

@@ -112,6 +112,20 @@ namespace Cs2Admin.API.Controllers
             _context.Servers.Add(server);
             await _context.SaveChangesAsync(cancellationToken);
 
+            if (serverRequest.PluginSelections != null && serverRequest.PluginSelections.Any())
+            {
+                foreach (var selection in serverRequest.PluginSelections)
+                {
+                    _context.ServerPlugins.Add(new ServerPlugin
+                    {
+                        ServerId = server.Id,
+                        GamePluginId = selection.PluginId,
+                        ConfigOverridesJson = selection.ConfigOverridesJson
+                    });
+                }
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, result);
         }
 

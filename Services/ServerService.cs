@@ -1,4 +1,7 @@
+using System.Text;
+using System.Text.Json;
 using Cs2Admin.API.Configurations;
+using Cs2Admin.API.Data;
 using Cs2Admin.API.Exceptions;
 using Cs2Admin.API.Services.Interfaces;
 using Cs2Admin.API.ViewModels;
@@ -9,6 +12,7 @@ using Microsoft.Extensions.Options;
 namespace Cs2Admin.API.Services;
 
 public class ServerService(
+    ApplicationDbContext dbContext,
     ISteamTokenService steamTokenService,
     IPortAllocatorService portAllocatorService,
     IDockerClient dockerClient,
@@ -19,8 +23,7 @@ public class ServerService(
 {
     private readonly ServersConfiguration _serversConfiguration = serversConfigurationOptions.Value;
 
-    public async Task<ServerResult> CreateServerAsync(ServerRequest serverRequest,
-        CancellationToken cancellationToken = default)
+    public async Task<ServerResult> CreateServerAsync(ServerRequest serverRequest, CancellationToken cancellationToken = default)
     {
         var token = await steamTokenService.GetAvailableTokenAsync(cancellationToken);
         if (token == null)
@@ -45,8 +48,67 @@ public class ServerService(
             throw new Exception($"Server {token.Memo} already exists.");
         }
 
-        Directory.CreateDirectory(_serversConfiguration.UpperDir);
-        Directory.CreateDirectory(_serversConfiguration.WorkDir);
+        var instanceUpperPath = Path.Combine(_serversConfiguration.UpperDir, token.Memo);
+        var instanceWorkPath = Path.Combine(_serversConfiguration.WorkDir, token.Memo);
+
+        Directory.CreateDirectory(instanceUpperPath);
+        Directory.CreateDirectory(instanceWorkPath);
+
+        if (serverRequest.PluginSelections is { Count: > 0 })
+        {
+            var serializerOptions = new JsonSerializerOptions { WriteIndented = true };
+
+            foreach (var selection in serverRequest.PluginSelections)
+            {
+                var plugin = await dbContext.GamePlugins.FindAsync(new object[] { selection.PluginId }, cancellationToken);
+                if (plugin == null) continue;
+
+                var templatePluginPath = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+                var destinationPluginPath = Path.Combine(
+                    instanceUpperPath,
+                    "game/csgo/addons/counterstrikesharp/plugins",
+                    plugin.Name);
+
+                if (Directory.Exists(templatePluginPath))
+                {
+                    CopyDirectory(templatePluginPath, destinationPluginPath);
+                    logger.LogInformation("Plugin {PluginName} dynamically injected for instance {InstanceMemo}",
+                        plugin.Name, token.Memo);
+                }
+
+                // Process config files
+                List<ConfigFileDefinition> configFiles = new();
+                if (!string.IsNullOrWhiteSpace(plugin.ConfigFilesJson))
+                {
+                    try { configFiles = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(plugin.ConfigFilesJson) ?? new(); } catch { }
+                }
+
+                var overrides = string.IsNullOrWhiteSpace(selection.ConfigOverridesJson)
+                    ? new Dictionary<string, JsonElement>()
+                    : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+
+                foreach (var configFile in configFiles)
+                {
+                    var defaults = configFile.DefaultContent;
+                    overrides.TryGetValue(configFile.Key, out var fileOverrides);
+
+                    var merged = MergeConfigs(defaults, fileOverrides);
+                    var fullPath = Path.Combine(instanceUpperPath, configFile.RelativePath);
+                    var dir = Path.GetDirectoryName(fullPath);
+                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                    if (configFile.Format.ToLower() == "cfg")
+                    {
+                        var cfgStr = WriteCfgFormat(merged);
+                        await File.WriteAllTextAsync(fullPath, cfgStr, Encoding.UTF8, cancellationToken);
+                    }
+                    else
+                    {
+                        await File.WriteAllTextAsync(fullPath, JsonSerializer.Serialize(merged, serializerOptions), cancellationToken);
+                    }
+                }
+            }
+        }
 
         var volumeName = $"cs2-vol-instance-{token.Memo}";
         await dockerClient.Volumes.CreateAsync(new VolumesCreateParameters
@@ -59,7 +121,7 @@ public class ServerService(
                 { "device", "overlay" },
                 {
                     "o",
-                    $"lowerdir={_serversConfiguration.GameBaseDir},upperdir={_serversConfiguration.UpperDir},workdir={_serversConfiguration.WorkDir}"
+                    $"lowerdir={_serversConfiguration.GameBaseDir},upperdir={instanceUpperPath},workdir={instanceWorkPath}"
                 }
             }
         }, cancellationToken);
@@ -121,6 +183,27 @@ public class ServerService(
         };
     }
 
+    private static void CopyDirectory(string sourceDir, string destinationDir)
+    {
+        var dir = new DirectoryInfo(sourceDir);
+        if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+        var dirs = dir.GetDirectories();
+        Directory.CreateDirectory(destinationDir);
+
+        foreach (var file in dir.GetFiles())
+        {
+            var targetFilePath = Path.Combine(destinationDir, file.Name);
+            file.CopyTo(targetFilePath, true);
+        }
+
+        foreach (var subDir in dirs)
+        {
+            var newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+            CopyDirectory(subDir.FullName, newDestinationDir);
+        }
+    }
+
     public Task StartServerAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         return dockerClient.Containers.StartContainerAsync(instanceId, null, cancellationToken);
@@ -160,5 +243,58 @@ public class ServerService(
         }, cancellationToken);
 
         logger.LogInformation("Successfully deleted container: {ContainerId}", containerId);
+    }
+
+    private JsonElement MergeConfigs(JsonElement? defaults, JsonElement? overrides)
+    {
+        if (defaults == null || defaults.Value.ValueKind != JsonValueKind.Object)
+        {
+            if (overrides == null || overrides.Value.ValueKind != JsonValueKind.Object)
+                return JsonSerializer.SerializeToElement(new { });
+            return overrides.Value;
+        }
+
+        if (overrides == null || overrides.Value.ValueKind != JsonValueKind.Object)
+            return defaults.Value;
+
+        var mergedDict = new Dictionary<string, object?>();
+
+        foreach (var prop in defaults.Value.EnumerateObject())
+        {
+            mergedDict[prop.Name] = GetElementValue(prop.Value);
+        }
+
+        foreach (var prop in overrides.Value.EnumerateObject())
+        {
+            mergedDict[prop.Name] = GetElementValue(prop.Value);
+        }
+
+        return JsonSerializer.SerializeToElement(mergedDict);
+    }
+
+    private object? GetElementValue(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => element // Keep as JsonElement for nested objects/arrays (shallow merge for now)
+        };
+    }
+
+    private string WriteCfgFormat(JsonElement json)
+    {
+        if (json.ValueKind != JsonValueKind.Object) return "";
+        var sb = new StringBuilder();
+        foreach (var prop in json.EnumerateObject())
+        {
+            var key = prop.Name;
+            var val = prop.Value;
+            var valStr = val.ValueKind == JsonValueKind.String ? val.GetString() : val.GetRawText();
+            sb.AppendLine($"{key} {valStr}");
+        }
+        return sb.ToString();
     }
 }

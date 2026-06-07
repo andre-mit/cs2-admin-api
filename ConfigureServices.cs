@@ -11,7 +11,9 @@ public static class ConfigureServices
         services.AddHostedService<S3CleanupService>();
 
         services.AddScoped<IRconService, RconService>();
-        services.AddScoped<IServerService, ServerService>();
+        services.AddScoped<ServerService>();
+        services.AddScoped<IServerService>(sp => sp.GetRequiredService<ServerService>());
+        services.AddScoped<IPluginService, PluginService>();
         services.AddScoped<ISteamTokenService, SteamTokenService>();
         services.AddSingleton<IPortAllocatorService, PortAllocatorService>();
 
