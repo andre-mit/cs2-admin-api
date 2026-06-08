@@ -92,7 +92,15 @@ namespace Cs2Admin.API.Controllers
             [FromBody] ServerRequest serverRequest,
             CancellationToken cancellationToken)
         {
-            var result = await _serverService.CreateServerAsync(serverRequest, cancellationToken);
+            ServerResult result;
+            try
+            {
+                result = await _serverService.CreateServerAsync(serverRequest, cancellationToken);
+            }
+            catch (Cs2Admin.API.Exceptions.NoAvailableServersException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
 
             var serverHost = _configuration["ServerHost"] ?? "localhost";
 
