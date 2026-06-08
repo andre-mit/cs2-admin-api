@@ -69,8 +69,6 @@ namespace Cs2Admin.API.Services
 
                 logger.LogInformation("Extracting zip file to plugin directory: {PluginDir}", pluginDir);
                 ZipFile.ExtractToDirectory(tempFilePath, pluginDir, overwriteFiles: true);
-                
-                DetectAndNormalizePluginStructure(pluginDir, plugin.Name);
             }
             catch (Exception ex)
             {
@@ -104,51 +102,6 @@ namespace Cs2Admin.API.Services
 
                 context.GamePlugins.Remove(plugin);
                 await context.SaveChangesAsync(ct);
-            }
-        }
-
-        private void DetectAndNormalizePluginStructure(string targetDir, string pluginName)
-        {
-            var dllFiles = Directory.GetFiles(targetDir, "*.dll", SearchOption.AllDirectories);
-            if (dllFiles.Length == 0) return;
-
-            var mainDllPath = dllFiles.FirstOrDefault(f =>
-                                  Path.GetFileNameWithoutExtension(f)
-                                      .Equals(pluginName, StringComparison.OrdinalIgnoreCase))
-                              ?? dllFiles.First();
-
-            var actualPluginFolder = Path.GetDirectoryName(mainDllPath);
-
-            if (actualPluginFolder != null && actualPluginFolder != targetDir)
-            {
-                logger.LogInformation("Nesting detected. Normalizing folder structure from {ActualFolder} to {TargetDir}", actualPluginFolder, targetDir);
-
-                var tempTarget = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-                Directory.CreateDirectory(tempTarget);
-                
-                MoveDirectoryContents(actualPluginFolder, tempTarget);
-                
-                Directory.Delete(targetDir, true);
-                Directory.CreateDirectory(targetDir);
-                
-                MoveDirectoryContents(tempTarget, targetDir);
-                Directory.Delete(tempTarget, true);
-            }
-        }
-
-        private static void MoveDirectoryContents(string source, string target)
-        {
-            foreach (var file in Directory.GetFiles(source))
-            {
-                var dest = Path.Combine(target, Path.GetFileName(file));
-                File.Move(file, dest, true);
-            }
-
-            foreach (var dir in Directory.GetDirectories(source))
-            {
-                var dest = Path.Combine(target, Path.GetFileName(dir));
-                Directory.CreateDirectory(dest);
-                MoveDirectoryContents(dir, dest);
             }
         }
     }
