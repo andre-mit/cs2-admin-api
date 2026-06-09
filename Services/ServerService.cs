@@ -178,6 +178,22 @@ public class ServerService(
                 Container = containerResponse.ID
             }, cancellationToken);
         }
+
+        if (!string.IsNullOrWhiteSpace(_serversConfiguration.Network.AdditionalNetworks))
+        {
+            var networks = _serversConfiguration.Network.AdditionalNetworks.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var net in networks)
+            {
+                var netName = net.Trim();
+                if (!string.IsNullOrEmpty(netName) && netName != _serversConfiguration.Network.Name)
+                {
+                    await dockerClient.Networks.ConnectNetworkAsync(netName, new NetworkConnectParameters
+                    {
+                        Container = containerResponse.ID
+                    }, cancellationToken);
+                }
+            }
+        }
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(),
             cancellationToken);
 
