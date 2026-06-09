@@ -178,28 +178,65 @@ public class ServerService(
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
         logger.LogInformation("Creating Docker container {ContainerId}", containerId);
-        var containerResponse = await dockerClient.Containers.CreateContainerAsync(new CreateContainerParameters
+        CreateContainerResponse containerResponse;
+        try
         {
-            Image = "joedwards32/cs2",
-            Name = containerId,
-            Env = envList,
-            HostConfig = new HostConfig
+            containerResponse = await dockerClient.Containers.CreateContainerAsync(new CreateContainerParameters
             {
-                PortBindings = new Dictionary<string, IList<PortBinding>>
+                Image = "joedwards32/cs2",
+                Name = containerId,
+                Env = envList,
+                HostConfig = new HostConfig
                 {
-                    { $"{ports.GamePort}/udp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
-                    { $"{ports.GamePort}/tcp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
-                    { $"{ports.TvPort}/udp", new List<PortBinding> { new() { HostPort = ports.TvPort.ToString() } } }
+                    PortBindings = new Dictionary<string, IList<PortBinding>>
+                    {
+                        { $"{ports.GamePort}/udp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                        { $"{ports.GamePort}/tcp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                        { $"{ports.TvPort}/udp", new List<PortBinding> { new() { HostPort = ports.TvPort.ToString() } } }
+                    },
+                    Binds = new List<string>
+                    {
+                        $"{volumeName}:/home/steam/cs2-dedicated"
+                    },
+                    DNS = _serversConfiguration.Network.DnsServers,
+                    NetworkMode = _serversConfiguration.Network.NetworkMode,
                 },
-                Binds = new List<string>
+                Tty = true, OpenStdin = true
+            }, cancellationToken);
+        }
+        catch (DockerApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            logger.LogInformation("Image joedwards32/cs2 not found. Pulling from Docker Hub...");
+            await dockerClient.Images.CreateImageAsync(
+                new ImagesCreateParameters { FromImage = "joedwards32/cs2", Tag = "latest" },
+                null,
+                new Progress<JSONMessage>(msg => { }),
+                cancellationToken);
+            
+            logger.LogInformation("Image pulled successfully. Retrying container creation...");
+            containerResponse = await dockerClient.Containers.CreateContainerAsync(new CreateContainerParameters
+            {
+                Image = "joedwards32/cs2",
+                Name = containerId,
+                Env = envList,
+                HostConfig = new HostConfig
                 {
-                    $"{volumeName}:/home/steam/cs2-dedicated"
+                    PortBindings = new Dictionary<string, IList<PortBinding>>
+                    {
+                        { $"{ports.GamePort}/udp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                        { $"{ports.GamePort}/tcp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                        { $"{ports.TvPort}/udp", new List<PortBinding> { new() { HostPort = ports.TvPort.ToString() } } }
+                    },
+                    Binds = new List<string>
+                    {
+                        $"{volumeName}:/home/steam/cs2-dedicated"
+                    },
+                    DNS = _serversConfiguration.Network.DnsServers,
+                    NetworkMode = _serversConfiguration.Network.NetworkMode,
                 },
-                DNS = _serversConfiguration.Network.DnsServers,
-                NetworkMode = _serversConfiguration.Network.NetworkMode,
-            },
-            Tty = true, OpenStdin = true
-        }, cancellationToken);
+                Tty = true, OpenStdin = true
+            }, cancellationToken);
+        }
         if (!string.IsNullOrWhiteSpace(_serversConfiguration.Network.Name))
         {
             await dockerClient.Networks.ConnectNetworkAsync(_serversConfiguration.Network.Name, new NetworkConnectParameters
