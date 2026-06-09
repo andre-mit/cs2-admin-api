@@ -10,7 +10,7 @@ namespace Cs2Admin.API.Controllers
 {
     [ApiController]
     [Route("api/v1/[controller]")]
-    // [Authorize] - Uncomment in production
+    [Authorize]
     public class PluginsController : ControllerBase
     {
         private readonly IPluginService _pluginService;
