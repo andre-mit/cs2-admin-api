@@ -15,38 +15,24 @@ namespace Cs2Admin.API.Controllers
     [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
-    public class ServersController : ControllerBase
+    public class ServersController(
+        ApplicationDbContext context,
+        IRconService rconService,
+        IServerService serverService,
+        IConfiguration configuration,
+        ILogger<ServersController> logger) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IRconService _rcon;
-        private readonly IServerService _serverService;
-        private readonly IConfiguration _configuration;
-        private readonly ILogger<ServersController> _logger;
-
-        public ServersController(
-            ApplicationDbContext context,
-            IRconService rcon,
-            IServerService serverService,
-            IConfiguration configuration,
-            ILogger<ServersController> logger)
-        {
-            _context = context;
-            _rcon = rcon;
-            _serverService = serverService;
-            _configuration = configuration;
-            _logger = logger;
-        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Server>>> GetServers()
         {
-            return await _context.Servers.OrderByDescending(s => s.CreatedAt).ToListAsync();
+            return await context.Servers.OrderByDescending(s => s.CreatedAt).ToListAsync();
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<ActionResult<Server>> GetServer(int id)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
 
             if (server == null)
             {
@@ -56,15 +42,15 @@ namespace Cs2Admin.API.Controllers
             return server;
         }
 
-        [HttpGet("{id}/status")]
+        [HttpGet("{id:int}/status")]
         public async Task<IActionResult> GetServerStatus(int id)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null) return NotFound();
 
             try
             {
-                var response = await _rcon.SendCommandAsync(
+                var response = await rconService.SendCommandAsync(
                     server.IpString,
                     server.Port,
                     server.RconPassword ?? "",
@@ -81,8 +67,8 @@ namespace Cs2Admin.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Server>> CreateServer(Server server)
         {
-            _context.Servers.Add(server);
-            await _context.SaveChangesAsync();
+            context.Servers.Add(server);
+            await context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, server);
         }
@@ -98,7 +84,7 @@ namespace Cs2Admin.API.Controllers
             ServerResult result;
             try
             {
-                result = await _serverService.CreateServerAsync(serverRequest, cancellationToken);
+                result = await serverService.CreateServerAsync(serverRequest, cancellationToken);
             }
             catch (Cs2Admin.API.Exceptions.NoAvailableServersException ex)
             {
@@ -110,11 +96,11 @@ namespace Cs2Admin.API.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create dynamic server. Request Name: {Name}", serverRequest.Name);
+                logger.LogError(ex, "Failed to create dynamic server. Request Name: {Name}", serverRequest.Name);
                 return StatusCode(500, new { message = ex.Message });
             }
 
-            var serverHost = _configuration["ServerHost"] ?? "localhost";
+            var serverHost = configuration["ServerHost"] ?? "localhost";
 
             var server = new Server
             {
@@ -130,21 +116,21 @@ namespace Cs2Admin.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.Servers.Add(server);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.Servers.Add(server);
+            await context.SaveChangesAsync(cancellationToken);
 
-            if (serverRequest.PluginSelections != null && serverRequest.PluginSelections.Any())
+            if (serverRequest.PluginSelections.Count != 0)
             {
                 foreach (var selection in serverRequest.PluginSelections)
                 {
-                    _context.ServerPlugins.Add(new ServerPlugin
+                    context.ServerPlugins.Add(new ServerPlugin
                     {
                         ServerId = server.Id,
                         GamePluginId = selection.PluginId,
                         ConfigOverridesJson = selection.ConfigOverridesJson
                     });
                 }
-                await _context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
             }
 
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, result);
@@ -153,15 +139,15 @@ namespace Cs2Admin.API.Controllers
         /// <summary>
         /// Start a dynamic server container.
         /// </summary>
-        [HttpPost("{id}/start")]
+        [HttpPost("{id:int}/start")]
         public async Task<IActionResult> StartServer(int id, CancellationToken cancellationToken)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be started via this endpoint.");
 
-            await _serverService.StartServerAsync(server.ContainerId, cancellationToken);
+            await serverService.StartServerAsync(server.ContainerId, cancellationToken);
             return Ok(new { message = "Server started successfully." });
         }
 
@@ -171,12 +157,12 @@ namespace Cs2Admin.API.Controllers
         [HttpPost("{id}/stop")]
         public async Task<IActionResult> StopServer(int id, CancellationToken cancellationToken)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be stopped via this endpoint.");
 
-            await _serverService.StopServerAsync(server.ContainerId, cancellationToken);
+            await serverService.StopServerAsync(server.ContainerId, cancellationToken);
             return Ok(new { message = "Server stopped successfully." });
         }
 
@@ -186,12 +172,12 @@ namespace Cs2Admin.API.Controllers
         [HttpPost("{id}/restart")]
         public async Task<IActionResult> RestartServer(int id, CancellationToken cancellationToken)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be restarted via this endpoint.");
 
-            await _serverService.RestartServerAsync(server.ContainerId, cancellationToken);
+            await serverService.RestartServerAsync(server.ContainerId, cancellationToken);
             return Ok(new { message = "Server restarted successfully." });
         }
 
@@ -201,15 +187,15 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}/dynamic")]
         public async Task<IActionResult> DeleteDynamicServer(int id, CancellationToken cancellationToken)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be deleted via this endpoint.");
 
-            await _serverService.DeleteServerAsync(server.ContainerId, cancellationToken);
+            await serverService.DeleteServerAsync(server.ContainerId, cancellationToken);
 
-            _context.Servers.Remove(server);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.Servers.Remove(server);
+            await context.SaveChangesAsync(cancellationToken);
 
             return NoContent();
         }
@@ -222,11 +208,11 @@ namespace Cs2Admin.API.Controllers
                 return BadRequest();
             }
 
-            _context.Entry(server).State = EntityState.Modified;
+            context.Entry(server).State = EntityState.Modified;
 
             try
             {
-                await _context.SaveChangesAsync();
+                await context.SaveChangesAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -246,21 +232,21 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteServer(int id)
         {
-            var server = await _context.Servers.FindAsync(id);
+            var server = await context.Servers.FindAsync(id);
             if (server == null)
             {
                 return NotFound();
             }
 
-            _context.Servers.Remove(server);
-            await _context.SaveChangesAsync();
+            context.Servers.Remove(server);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
 
         private bool ServerExists(int id)
         {
-            return _context.Servers.Any(e => e.Id == id);
+            return context.Servers.Any(e => e.Id == id);
         }
     }
 }
