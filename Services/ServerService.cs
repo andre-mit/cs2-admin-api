@@ -88,9 +88,18 @@ public class ServerService(
                     try { configFiles = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(plugin.ConfigFilesJson) ?? new(); } catch { }
                 }
 
-                var overrides = string.IsNullOrWhiteSpace(selection.ConfigOverridesJson)
-                    ? new Dictionary<string, JsonElement>()
-                    : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+                Dictionary<string, JsonElement> overrides = new();
+                if (!string.IsNullOrWhiteSpace(selection.ConfigOverridesJson))
+                {
+                    try
+                    {
+                        overrides = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+                    }
+                    catch (JsonException ex)
+                    {
+                        throw new ArgumentException($"Invalid JSON format in overrides for plugin {plugin.Name}. Ensure it is a valid JSON object starting with '{{'. Raw input: {selection.ConfigOverridesJson}", ex);
+                    }
+                }
 
                 foreach (var configFile in configFiles)
                 {

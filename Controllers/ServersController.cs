@@ -94,6 +94,10 @@ namespace Cs2Admin.API.Controllers
             {
                 return StatusCode(409, new { message = "A server with this name or token already exists. Please try another token or clear old servers." });
             }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to create dynamic server. Request Name: {Name}", serverRequest.Name);
