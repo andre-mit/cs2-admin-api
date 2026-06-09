@@ -71,8 +71,7 @@ public class ServerService(
                 var templatePluginPath = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
                 var destinationPluginPath = Path.Combine(
                     instanceUpperPath,
-                    "game/csgo/addons/counterstrikesharp/plugins",
-                    plugin.Name);
+                    "game/csgo");
 
                 if (Directory.Exists(templatePluginPath))
                 {
