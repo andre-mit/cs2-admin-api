@@ -10,8 +10,8 @@ public class ServersConfiguration
 
     public Dictionary<string, string> DefaultEnvVariables { get; set; } = [];
 
-    public string UpperDir (string serverName) => Path.Combine(ServersBaseDir, serverName, "upper");
-    public string WorkDir (string serverName) => Path.Combine(ServersBaseDir, serverName, "work");
+    public string UpperDir (string serverName) => $"{ServersBaseDir.TrimEnd('/')}/{serverName}/upper";
+    public string WorkDir (string serverName) => $"{ServersBaseDir.TrimEnd('/')}/{serverName}/work";
 
     public class NetworkConfiguration
     {
