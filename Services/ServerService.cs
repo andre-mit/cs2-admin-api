@@ -89,11 +89,18 @@ public class ServerService(
 
                 foreach (var configFile in configFiles)
                 {
+                    var relativePath = configFile.RelativePath?.TrimStart('/', '\\') ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(relativePath))
+                    {
+                        logger.LogWarning("Skipping config file {Key} because RelativePath is empty.", configFile.Key);
+                        continue;
+                    }
+
                     var defaults = configFile.DefaultContent;
                     overrides.TryGetValue(configFile.Key, out var fileOverrides);
 
                     var merged = MergeConfigs(defaults, fileOverrides);
-                    var fullPath = Path.Combine(instanceUpperPath, configFile.RelativePath);
+                    var fullPath = Path.Combine(instanceUpperPath, relativePath);
                     var dir = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
