@@ -15,7 +15,7 @@ public class ServersConfiguration
 
     public class NetworkConfiguration
     {
-        public string Name { get; set; } = "default";
+        public string Name { get; set; } = "bridge";
         public string NetworkMode { get; set; } = string.Empty;
         public bool External { get; set; } = true;
         public List<string> DnsServers { get; set; } = [];

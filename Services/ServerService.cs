@@ -143,8 +143,8 @@ public class ServerService(
         mergedEnvironment["CS2_MAXPLAYERS"] = serverRequest.MaxPlayers.ToString();
         mergedEnvironment["CS2_ADDITIONAL_ARGS"] = "-tickrate 128";
 
-        mergedEnvironment["CS2_PORT"] = "27015";
-        mergedEnvironment["TV_PORT"] = "27020";
+        mergedEnvironment["CS2_PORT"] = ports.GamePort.ToString();
+        mergedEnvironment["TV_PORT"] = ports.TvPort.ToString();
         mergedEnvironment["CS2_RCONPW"] = serverRequest.RconPassword ?? Guid.NewGuid().ToString("N")[..16];
 
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
@@ -158,9 +158,9 @@ public class ServerService(
             {
                 PortBindings = new Dictionary<string, IList<PortBinding>>
                 {
-                    { "27015/udp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
-                    { "27015/tcp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
-                    { "27020/udp", new List<PortBinding> { new() { HostPort = ports.TvPort.ToString() } } }
+                    { $"{ports.GamePort}/udp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                    { $"{ports.GamePort}/tcp", new List<PortBinding> { new() { HostPort = ports.GamePort.ToString() } } },
+                    { $"{ports.TvPort}/udp", new List<PortBinding> { new() { HostPort = ports.TvPort.ToString() } } }
                 },
                 Binds = new List<string>
                 {
@@ -171,10 +171,13 @@ public class ServerService(
             },
             Tty = true, OpenStdin = true
         }, cancellationToken);
-        await dockerClient.Networks.ConnectNetworkAsync(_serversConfiguration.Network.Name, new NetworkConnectParameters
+        if (!string.IsNullOrWhiteSpace(_serversConfiguration.Network.Name))
         {
-            Container = containerResponse.ID
-        }, cancellationToken);
+            await dockerClient.Networks.ConnectNetworkAsync(_serversConfiguration.Network.Name, new NetworkConnectParameters
+            {
+                Container = containerResponse.ID
+            }, cancellationToken);
+        }
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(),
             cancellationToken);
 
