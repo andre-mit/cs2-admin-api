@@ -81,23 +81,40 @@ public class ServerService(
                         plugin.Name, token.Memo);
                 }
 
-                // Process config files
                 List<ConfigFileDefinition> configFiles = new();
+                
                 if (!string.IsNullOrWhiteSpace(plugin.ConfigFilesJson))
                 {
                     try { configFiles = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(plugin.ConfigFilesJson) ?? new(); } catch { }
                 }
 
-                Dictionary<string, JsonElement> overrides = new();
                 if (!string.IsNullOrWhiteSpace(selection.ConfigOverridesJson))
                 {
                     try
                     {
-                        overrides = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+                        var editedDefinitions = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(selection.ConfigOverridesJson);
+                        if (editedDefinitions != null && editedDefinitions.Count > 0)
+                        {
+                            configFiles = editedDefinitions;
+                        }
                     }
-                    catch (JsonException ex)
+                    catch
                     {
-                        throw new ArgumentException($"Invalid JSON format in overrides for plugin {plugin.Name}. Ensure it is a valid JSON object starting with '{{'. Raw input: {selection.ConfigOverridesJson}", ex);
+                        try
+                        {
+                            var overrides = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+                            foreach (var file in configFiles)
+                            {
+                                if (overrides.TryGetValue(file.Key, out var overrideElement))
+                                {
+                                    file.DefaultContent = MergeConfigs(file.DefaultContent, overrideElement);
+                                }
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            throw new ArgumentException($"Invalid JSON format in overrides for plugin {plugin.Name}. Ensure it is either a valid JSON array matching templates or a JSON object. Raw input: {selection.ConfigOverridesJson}", ex);
+                        }
                     }
                 }
 
@@ -110,10 +127,7 @@ public class ServerService(
                         continue;
                     }
 
-                    var defaults = configFile.DefaultContent;
-                    overrides.TryGetValue(configFile.Key, out var fileOverrides);
-
-                    var merged = MergeConfigs(defaults, fileOverrides);
+                    var merged = configFile.DefaultContent ?? JsonSerializer.SerializeToElement(new { });
                     var fullPath = Path.Combine(instanceUpperPath, relativePath);
                     var dir = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
