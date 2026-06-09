@@ -101,6 +101,14 @@ namespace Cs2Admin.API.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+            catch (Docker.DotNet.DockerApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return StatusCode(409, new { message = "A server with this name or token already exists. Please try another token or clear old servers." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
 
             var serverHost = _configuration["ServerHost"] ?? "localhost";
 
@@ -110,6 +118,7 @@ namespace Cs2Admin.API.Controllers
                 Port = result.GamePort,
                 TvPort = result.RconPort,
                 RconPassword = serverRequest.RconPassword,
+                ServerPassword = serverRequest.Password,
                 DisplayName = serverRequest.Name,
                 ContainerId = result.ServerId,
                 IsDynamic = true,
