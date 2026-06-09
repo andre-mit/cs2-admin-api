@@ -25,6 +25,7 @@ public class ServerService(
 
     public async Task<ServerResult> CreateServerAsync(ServerRequest serverRequest, CancellationToken cancellationToken = default)
     {
+        logger.LogInformation("Starting dynamic server creation...");
         var token = await steamTokenService.GetAvailableTokenAsync(cancellationToken);
         if (token == null)
         {
@@ -45,14 +46,18 @@ public class ServerService(
 
         if (containers.Any())
         {
+            logger.LogWarning("Server {Memo} already exists.", token.Memo);
             throw new Exception($"Server {token.Memo} already exists.");
         }
 
-        var instanceUpperPath = Path.Combine(_serversConfiguration.UpperDir, token.Memo);
-        var instanceWorkPath = Path.Combine(_serversConfiguration.WorkDir, token.Memo);
+        logger.LogInformation("Creating directories for instance: {Memo}", token.Memo);
+        var instanceUpperPath = _serversConfiguration.UpperDir(token.Memo);
+        var instanceWorkPath = _serversConfiguration.WorkDir(token.Memo);
 
         Directory.CreateDirectory(instanceUpperPath);
         Directory.CreateDirectory(instanceWorkPath);
+        
+        logger.LogInformation("Directories  created: [upper] {DirectoryUpper}, [work] {DirectoryWork}", instanceUpperPath, instanceWorkPath);
 
         if (serverRequest.PluginSelections is { Count: > 0 })
         {
@@ -118,6 +123,7 @@ public class ServerService(
         }
 
         var volumeName = $"cs2-vol-instance-{token.Memo}";
+        logger.LogInformation("Creating Docker volume {VolumeName}", volumeName);
         await dockerClient.Volumes.CreateAsync(new VolumesCreateParameters
         {
             Name = volumeName,
@@ -149,6 +155,7 @@ public class ServerService(
 
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
+        logger.LogInformation("Creating Docker container {ContainerId}", containerId);
         var containerResponse = await dockerClient.Containers.CreateContainerAsync(new CreateContainerParameters
         {
             Image = "joedwards32/cs2",
@@ -194,12 +201,14 @@ public class ServerService(
                 }
             }
         }
+        logger.LogInformation("Starting Docker container {ContainerId}", containerResponse.ID);
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(),
             cancellationToken);
 
         var serverHost = configuration["ServerHost"] ?? "localhost";
         var connectUrl = $"{serverHost}:{ports.GamePort}";
 
+        logger.LogInformation("Dynamic server {ContainerId} successfully started on {ConnectUrl}", containerId, connectUrl);
         return new ServerResult
         {
             ServerId = containerId,
@@ -267,6 +276,28 @@ public class ServerService(
             Force = true,
             RemoveVolumes = true
         }, cancellationToken);
+
+        try
+        {
+            var memo = containerId.Replace("cs2-server-", "");
+            var instanceUpperPath = _serversConfiguration.UpperDir(memo);
+            var instanceWorkPath = _serversConfiguration.WorkDir(memo);
+
+            if (Directory.Exists(instanceUpperPath))
+            {
+                logger.LogInformation("Deleting upper directory: {Path}", instanceUpperPath);
+                Directory.Delete(instanceUpperPath, true);
+            }
+            if (Directory.Exists(instanceWorkPath))
+            {
+                logger.LogInformation("Deleting work directory: {Path}", instanceWorkPath);
+                Directory.Delete(instanceWorkPath, true);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to delete overlay directories for container {ContainerId}", containerId);
+        }
 
         logger.LogInformation("Successfully deleted container: {ContainerId}", containerId);
     }

@@ -6,12 +6,12 @@ public class ServersConfiguration
     public string ServersBaseDir { get; set; } = "/var/lib/cs2-instances";
     public string PluginsBaseDir { get; set; } = "/var/lib/cs2-plugins";
     
-    public NetworkConfiguration Network { get; set; } = new NetworkConfiguration();
+    public NetworkConfiguration Network { get; set; } = new();
 
     public Dictionary<string, string> DefaultEnvVariables { get; set; } = [];
-    
-    public string UpperDir => Path.Combine(ServersBaseDir, "upper");
-    public string WorkDir => Path.Combine(ServersBaseDir, "work");
+
+    public string UpperDir (string serverName) => Path.Combine(ServersBaseDir, serverName, "upper");
+    public string WorkDir (string serverName) => Path.Combine(ServersBaseDir, serverName, "work");
 
     public class NetworkConfiguration
     {

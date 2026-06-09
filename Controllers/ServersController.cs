@@ -21,17 +21,20 @@ namespace Cs2Admin.API.Controllers
         private readonly IRconService _rcon;
         private readonly IServerService _serverService;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<ServersController> _logger;
 
         public ServersController(
             ApplicationDbContext context,
             IRconService rcon,
             IServerService serverService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger<ServersController> logger)
         {
             _context = context;
             _rcon = rcon;
             _serverService = serverService;
             _configuration = configuration;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -107,6 +110,7 @@ namespace Cs2Admin.API.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to create dynamic server. Request Name: {Name}", serverRequest.Name);
                 return StatusCode(500, new { message = ex.Message });
             }
 
