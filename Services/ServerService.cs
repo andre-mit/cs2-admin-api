@@ -165,17 +165,34 @@ public class ServerService(
 
         var ports = await portAllocatorService.AllocateAvailablePortPairAsync(cancellationToken);
 
-        var mergedEnvironment = _serversConfiguration.DefaultEnvVariables;
+        var mergedEnvironment = new Dictionary<string, string>(_serversConfiguration.DefaultEnvVariables);
 
         mergedEnvironment["SRCDS_TOKEN"] = token.Token;
         mergedEnvironment["CS2_SERVERNAME"] = serverRequest.Name;
-        mergedEnvironment["CS2_PW"] = serverRequest.Password;
+        
+        if (!string.IsNullOrEmpty(serverRequest.Password))
+        {
+            mergedEnvironment["CS2_PW"] = serverRequest.Password;
+        }
+        else
+        {
+            mergedEnvironment.Remove("CS2_PW");
+        }
+        
         mergedEnvironment["CS2_MAXPLAYERS"] = serverRequest.MaxPlayers.ToString();
         mergedEnvironment["CS2_ADDITIONAL_ARGS"] = "-tickrate 128";
 
         mergedEnvironment["CS2_PORT"] = ports.GamePort.ToString();
         mergedEnvironment["TV_PORT"] = ports.TvPort.ToString();
-        mergedEnvironment["CS2_RCONPW"] = serverRequest.RconPassword ?? Guid.NewGuid().ToString("N")[..16];
+        
+        var finalRcon = string.IsNullOrEmpty(serverRequest.RconPassword) 
+            ? Guid.NewGuid().ToString("N")[..16] 
+            : serverRequest.RconPassword;
+            
+        mergedEnvironment["CS2_RCONPW"] = finalRcon;
+        
+        // Ensure we save the generated RCON password back so it can be saved to the database
+        serverRequest.RconPassword = finalRcon;
 
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
