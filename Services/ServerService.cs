@@ -146,6 +146,8 @@ public class ServerService(
 
         var volumeName = $"cs2-vol-instance-{token.Memo}";
         logger.LogInformation("Creating Docker volume {VolumeName}", volumeName);
+        var volumeOptions = $"lowerdir={_serversConfiguration.GameBaseDir},upperdir={instanceUpperPath},workdir={instanceWorkPath}";
+        logger.LogInformation("Volume driver options: {VolumeOptions}", volumeOptions);
         await dockerClient.Volumes.CreateAsync(new VolumesCreateParameters
         {
             Name = volumeName,
@@ -156,7 +158,7 @@ public class ServerService(
                 { "device", "overlay" },
                 {
                     "o",
-                    $"lowerdir={_serversConfiguration.GameBaseDir},upperdir={instanceUpperPath},workdir={instanceWorkPath}"
+                    volumeOptions
                 }
             }
         }, cancellationToken);
