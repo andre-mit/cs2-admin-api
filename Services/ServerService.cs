@@ -198,7 +198,7 @@ public class ServerService(
         {
             foreach (var kvp in serverRequest.ServerVariables)
             {
-                if (!string.IsNullOrWhiteSpace(kvp.Key))
+                if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
                 {
                     mergedEnvironment[kvp.Key] = kvp.Value;
                 }
