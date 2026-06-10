@@ -338,9 +338,22 @@ public class ServerService(
             RemoveVolumes = true
         }, cancellationToken);
 
+        var memo = containerId.Replace("cs2-server-", "");
+        var volumeName = $"cs2-vol-instance-{memo}";
+        
         try
         {
-            var memo = containerId.Replace("cs2-server-", "");
+            logger.LogInformation("Deleting Docker volume: {VolumeName}", volumeName);
+            await Task.Delay(1000, cancellationToken); // Wait for Docker to fully detach the volume
+            await dockerClient.Volumes.RemoveAsync(volumeName, true, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete volume {VolumeName} or it did not exist.", volumeName);
+        }
+
+        try
+        {
             var instanceUpperPath = _serversConfiguration.UpperDir(memo);
             var instanceWorkPath = _serversConfiguration.WorkDir(memo);
 
