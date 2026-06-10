@@ -194,6 +194,35 @@ public class ServerService(
         // Ensure we save the generated RCON password back so it can be saved to the database
         serverRequest.RconPassword = finalRcon;
 
+        // Generate server.cfg manually to bypass the container's broken template replacement
+        var cfgDir = Path.Combine(instanceUpperPath, "game/csgo/cfg");
+        Directory.CreateDirectory(cfgDir);
+        var sb = new StringBuilder();
+        sb.AppendLine($"hostname \"{serverRequest.Name}\"");
+        sb.AppendLine($"rcon_password \"{finalRcon}\"");
+        if (!string.IsNullOrEmpty(serverRequest.Password))
+            sb.AppendLine($"sv_password \"{serverRequest.Password}\"");
+        else
+            sb.AppendLine("sv_password \"\"");
+
+        sb.AppendLine($"sv_cheats {mergedEnvironment.GetValueOrDefault("CS2_CHEATS", "0")}");
+        sb.AppendLine($"sv_hibernate_when_empty {mergedEnvironment.GetValueOrDefault("CS2_SERVER_HIBERNATE", "1")}");
+        sb.AppendLine($"tv_autorecord {mergedEnvironment.GetValueOrDefault("TV_AUTORECORD", "1")}");
+        sb.AppendLine($"tv_enable {mergedEnvironment.GetValueOrDefault("TV_ENABLE", "1")}");
+        sb.AppendLine($"tv_maxrate {mergedEnvironment.GetValueOrDefault("TV_MAXRATE", "64")}");
+        sb.AppendLine($"tv_port {ports.TvPort}");
+        sb.AppendLine($"tv_password \"{mergedEnvironment.GetValueOrDefault("TV_PW", "")}\"");
+        sb.AppendLine($"tv_relaypassword \"{mergedEnvironment.GetValueOrDefault("TV_RELAY_PW", "")}\"");
+        sb.AppendLine($"log {mergedEnvironment.GetValueOrDefault("CS2_LOG", "on")}");
+        sb.AppendLine($"sv_logfile {mergedEnvironment.GetValueOrDefault("CS2_LOG_FILE", "1")}");
+        sb.AppendLine($"sv_logecho {mergedEnvironment.GetValueOrDefault("CS2_LOG_ECHO", "1")}");
+        sb.AppendLine($"mp_logmoney {mergedEnvironment.GetValueOrDefault("CS2_LOG_MONEY", "1")}");
+        sb.AppendLine($"mp_logdetail {mergedEnvironment.GetValueOrDefault("CS2_LOG_DETAIL", "3")}");
+        sb.AppendLine($"mp_logdetail_items {mergedEnvironment.GetValueOrDefault("CS2_LOG_ITEMS", "0")}");
+        sb.AppendLine($"mp_disconnect_kills_players {mergedEnvironment.GetValueOrDefault("CS2_DISCONNECT_KILLS", "0")}");
+
+        await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Encoding.UTF8, cancellationToken);
+
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
         logger.LogInformation("Creating Docker container {ContainerId}", containerId);
