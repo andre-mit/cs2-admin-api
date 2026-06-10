@@ -194,6 +194,17 @@ public class ServerService(
         // Ensure we save the generated RCON password back so it can be saved to the database
         serverRequest.RconPassword = finalRcon;
 
+        if (serverRequest.ServerVariables != null)
+        {
+            foreach (var kvp in serverRequest.ServerVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Key))
+                {
+                    mergedEnvironment[kvp.Key] = kvp.Value;
+                }
+            }
+        }
+
         // Generate server.cfg manually to bypass the container's broken template replacement
         var cfgDir = Path.Combine(instanceUpperPath, "game/csgo/cfg");
         Directory.CreateDirectory(cfgDir);
@@ -220,6 +231,21 @@ public class ServerService(
         sb.AppendLine($"mp_logdetail {mergedEnvironment.GetValueOrDefault("CS2_LOG_DETAIL", "3")}");
         sb.AppendLine($"mp_logdetail_items {mergedEnvironment.GetValueOrDefault("CS2_LOG_ITEMS", "0")}");
         sb.AppendLine($"mp_disconnect_kills_players {mergedEnvironment.GetValueOrDefault("CS2_DISCONNECT_KILLS", "0")}");
+
+        // Write any custom CVARs directly to server.cfg
+        if (serverRequest.ServerVariables != null)
+        {
+            foreach (var kvp in serverRequest.ServerVariables)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                {
+                    if (!kvp.Key.StartsWith("CS2_") && !kvp.Key.StartsWith("TV_") && !kvp.Key.StartsWith("STEAM"))
+                    {
+                        sb.AppendLine($"{kvp.Key} \"{kvp.Value}\"");
+                    }
+                }
+            }
+        }
 
         await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Encoding.UTF8, cancellationToken);
 

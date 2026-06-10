@@ -8,6 +8,7 @@ public class ServerRequest
     public byte MaxPlayers { get; set; }
     
     public List<PluginSelectionItem> PluginSelections { get; set; } = [];
+    public Dictionary<string, string> ServerVariables { get; set; } = new();
 }
 
 public class PluginSelectionItem
