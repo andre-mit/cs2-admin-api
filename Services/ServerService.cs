@@ -38,7 +38,7 @@ public class ServerService(
             All = true,
             Filters = new Dictionary<string, IDictionary<string, bool>>
             {
-                { "name", new Dictionary<string, bool> { { token.Memo, true } } }
+                { "name", new Dictionary<string, bool> { { $"^/cs2-server-{token.Memo}$", true } } }
             }
         };
 
@@ -338,6 +338,8 @@ public class ServerService(
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(),
             cancellationToken);
 
+        await steamTokenService.MarkTokenAsUsedAsync(token.Id, cancellationToken);
+
         var serverHost = configuration["ServerHost"] ?? "localhost";
         var connectUrl = $"{serverHost}:{ports.GamePort}";
 
@@ -444,6 +446,8 @@ public class ServerService(
         {
             logger.LogError(ex, "Failed to delete overlay directories for container {ContainerId}", containerId);
         }
+
+        await steamTokenService.MarkTokenAsAvailableByMemoAsync(memo, cancellationToken);
 
         logger.LogInformation("Successfully deleted container: {ContainerId}", containerId);
     }

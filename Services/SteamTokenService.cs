@@ -52,6 +52,19 @@ public class SteamTokenService(ApplicationDbContext context) : ISteamTokenServic
         await context.SaveChangesAsync(ct);
         return true;
     }
+
+    public async Task<bool> MarkTokenAsAvailableByMemoAsync(string memo, CancellationToken ct)
+    {
+        var token = await context.SteamServerTokens.FirstOrDefaultAsync(t => t.Memo == memo, ct);
+        if (token is not { IsAvailable: false })
+        {
+            return false;
+        }
+
+        token.IsAvailable = true;
+        await context.SaveChangesAsync(ct);
+        return true;
+    }
     
     public async Task<SteamServerToken?> GetAvailableTokenAsync(CancellationToken ct)
     {

@@ -20,6 +20,11 @@ public interface ISteamTokenService
     Task<bool> MarkTokenAsAvailableAsync(int tokenId, CancellationToken ct);
 
     /// <summary>
+    /// Marks the token as available by memo if it is currently not available. Returns true if the token was successfully marked as free, false if the token was already free or does not exist.
+    /// </summary>
+    Task<bool> MarkTokenAsAvailableByMemoAsync(string memo, CancellationToken ct);
+
+    /// <summary>
     /// Retrieves an available Steam server token from the database. If no tokens are available, it returns null.
     /// </summary>
     Task<SteamServerToken?> GetAvailableTokenAsync(CancellationToken ct);
