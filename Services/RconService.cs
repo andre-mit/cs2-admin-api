@@ -31,8 +31,11 @@ namespace Cs2Admin.API.Services
                 var endpoint = new IPEndPoint(ipAddress, port);
                 rcon = new RCON(endpoint, password);
                 
-                await rcon.ConnectAsync();
-                var result = await rcon.SendCommandAsync(command);
+                var connectTask = rcon.ConnectAsync();
+                await connectTask.WaitAsync(TimeSpan.FromSeconds(3));
+                
+                var sendTask = rcon.SendCommandAsync(command);
+                var result = await sendTask.WaitAsync(TimeSpan.FromSeconds(3));
                 
                 _logger.LogInformation("RCON response: {Result}", result);
                 return result;
