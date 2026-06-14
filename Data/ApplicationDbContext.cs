@@ -15,13 +15,14 @@ namespace Cs2Admin.API.Data
         public DbSet<Match> Matches { get; set; }
         public DbSet<MatchPlayerStat> MatchPlayerStats { get; set; }
         public DbSet<MatchEventLog> MatchEventLogs { get; set; }
-        public DbSet<Lobby> Lobbies { get; set; }
-        public DbSet<LobbyPlayer> LobbyPlayers { get; set; }
         public DbSet<GameMap> Maps { get; set; }
         
         public DbSet<SteamServerToken> SteamServerTokens { get; set; }
         public DbSet<GamePlugin> GamePlugins { get; set; }
         public DbSet<ServerPlugin> ServerPlugins { get; set; }
+
+        public DbSet<User> Users { get; set; }
+        public DbSet<MatchRoundTimeline> MatchRoundTimelines { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
