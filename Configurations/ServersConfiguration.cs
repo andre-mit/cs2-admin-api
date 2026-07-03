@@ -5,6 +5,8 @@ public class ServersConfiguration
     public string GameBaseDir { get; set; } = "/var/lib/cs2-base";
     public string ServersBaseDir { get; set; } = "/var/lib/cs2-instances";
     public string PluginsBaseDir { get; set; } = "/var/lib/cs2-plugins";
+    public string FastDlBaseDir { get; set; } = "/var/lib/cs2-fastdl";
+    public string FastDlUrl { get; set; } = string.Empty;
     
     public NetworkConfiguration Network { get; set; } = new();
 

@@ -8,5 +8,6 @@ public interface IServerService
     Task StartServerAsync(string instanceId, CancellationToken cancellationToken = default);
     Task StopServerAsync(string instanceId, CancellationToken cancellationToken = default);
     Task RestartServerAsync(string instanceId, CancellationToken cancellationToken = default);
+    Task UpdateBaseServerAsync(CancellationToken cancellationToken = default);
     Task DeleteServerAsync(string containerId, CancellationToken cancellationToken = default);
 }

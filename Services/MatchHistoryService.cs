@@ -89,10 +89,8 @@ public class MatchHistoryService : IMatchHistoryService
                 Events = g.Select(e => new
                 {
                     e.EventType,
-                    e.AttackerSteamId,
-                    e.AttackerName,
-                    e.VictimSteamId,
-                    e.VictimName,
+                    e.ActorSteamId,
+                    e.TargetSteamId,
                     e.Weapon,
                     e.Headshot,
                     e.Timestamp

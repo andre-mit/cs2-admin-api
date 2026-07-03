@@ -50,10 +50,8 @@ public class InternalDemoController : ControllerBase
                 MatchId = matchId,
                 RoundNumber = ev.RoundNumber,
                 EventType = ev.EventType,
-                AttackerSteamId = ev.AttackerSteamId,
-                AttackerName = ev.AttackerName,
-                VictimSteamId = ev.VictimSteamId,
-                VictimName = ev.VictimName,
+                ActorSteamId = ev.AttackerSteamId,
+                TargetSteamId = ev.VictimSteamId,
                 Weapon = ev.Weapon,
                 Headshot = ev.Headshot,
                 Timestamp = ev.Timestamp

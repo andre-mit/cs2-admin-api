@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cs2Admin.API.Services
 {
@@ -144,9 +145,10 @@ namespace Cs2Admin.API.Services
                 var allCandidateSteamIds = candidates.SelectMany(c => c.SteamIds).Distinct().ToList();
                 if (allCandidateSteamIds.Count < requiredPlayers) continue;
 
-                var eloLookup = await dbContext.Users
+                var users = await dbContext.Users
                     .Where(u => allCandidateSteamIds.Contains(u.SteamId))
-                    .ToDictionaryAsync(u => u.SteamId, u => u.Elo);
+                    .ToListAsync();
+                var eloLookup = users.ToDictionary(u => u.SteamId, u => u.Elo);
 
                 foreach (var id in allCandidateSteamIds)
                 {
@@ -306,13 +308,25 @@ namespace Cs2Admin.API.Services
             {
                 var server = await serverService.CreateServerAsync(request, CancellationToken.None);
                 
+                var serverEntity = new Models.Server
+                {
+                    ContainerId = server.ServerId,
+                    IpString = server.ConnectUrl.Split(':')[0],
+                    Port = server.GamePort,
+                    TvPort = server.RconPort,
+                    IsDynamic = true,
+                    InUse = true
+                };
+                dbContext.Servers.Add(serverEntity);
+                await dbContext.SaveChangesAsync();
+                
                 // Update match with ServerId
-                match.ServerId = server.Id;
+                match.ServerId = serverEntity.Id;
                 await dbContext.SaveChangesAsync();
 
-                _logger.LogInformation("Match {MatchId} server provisioned on port {Port}.", match.Id, server.Port);
+                _logger.LogInformation("Match {MatchId} server provisioned on port {Port}.", match.Id, server.GamePort);
 
-                var connectString = $"steam://connect/{server.IpAddress}:{server.Port}";
+                var connectString = $"steam://connect/{server.ConnectUrl}";
                 foreach (var steamId in steamIds)
                 {
                     await _hubContext.Clients.Group($"Player_{steamId}").SendAsync("ServerReady", new { connectString });

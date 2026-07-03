@@ -121,8 +121,8 @@ public class MatchZyService : IMatchZyService
             MatchId = matchId,
             RoundNumber = roundNumber,
             EventType = "round_end",
-            AttackerName = winner,
-            VictimName = reason?.ToString(),
+            ActorSteamId = winner,
+            TargetSteamId = reason?.ToString(),
             Timestamp = DateTime.UtcNow
         };
         _context.MatchRoundTimelines.Add(timeline);
