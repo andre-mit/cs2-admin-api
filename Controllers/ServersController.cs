@@ -248,6 +248,56 @@ namespace Cs2Admin.API.Controllers
             return NoContent();
         }
 
+        [HttpPost("update-base")]
+        public async Task<IActionResult> UpdateBaseServer(CancellationToken cancellationToken)
+        {
+            var runningServers = await context.Servers
+                .Where(s => s.IsDynamic && !string.IsNullOrEmpty(s.ContainerId))
+                .ToListAsync(cancellationToken);
+
+            var stoppedServerIds = new List<string>();
+
+            // 1. Stop all dynamic servers
+            foreach (var server in runningServers)
+            {
+                try
+                {
+                    await serverService.StopServerAsync(server.ContainerId!, cancellationToken);
+                    stoppedServerIds.Add(server.ContainerId!);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Could not stop server {ContainerId} or it was already stopped.", server.ContainerId);
+                }
+            }
+
+            // 2. Run the update
+            try
+            {
+                await serverService.UpdateBaseServerAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to update base server.");
+                return StatusCode(500, new { message = "Failed to update base game. Check logs for details." });
+            }
+
+            // 3. Restart previously stopped servers
+            foreach (var containerId in stoppedServerIds)
+            {
+                try
+                {
+                    await serverService.StartServerAsync(containerId, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to automatically restart server {ContainerId} after update.", containerId);
+                }
+            }
+
+            return Ok(new { message = "Base game updated successfully and dynamic servers restarted." });
+        }
+
         private bool ServerExists(int id)
         {
             return context.Servers.Any(e => e.Id == id);
