@@ -10,11 +10,17 @@ public static class ConfigureServices
     {
         services.AddHostedService<S3CleanupService>();
 
+        services.AddSingleton<IMatchmakingService, MatchmakingWorker>();
+        services.AddHostedService(sp => (MatchmakingWorker)sp.GetRequiredService<IMatchmakingService>());
+
         services.AddScoped<IRconService, RconService>();
         services.AddScoped<ServerService>();
         services.AddScoped<IServerService>(sp => sp.GetRequiredService<ServerService>());
         services.AddScoped<IPluginService, PluginService>();
         services.AddScoped<ISteamTokenService, SteamTokenService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IMatchHistoryService, MatchHistoryService>();
+        services.AddScoped<IMatchZyService, MatchZyService>();
         services.AddSingleton<IPortAllocatorService, PortAllocatorService>();
 
         // Docker Client

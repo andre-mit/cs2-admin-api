@@ -23,5 +23,6 @@ namespace Cs2Admin.API.Models
         public DateTime? EndTime { get; set; }
         public string? Winner { get; set; }
         public string? Forfeit { get; set; }
+        public string? DemoUrl { get; set; }
     }
 }

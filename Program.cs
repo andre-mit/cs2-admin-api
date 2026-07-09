@@ -10,8 +10,19 @@ using Amazon.S3;
 using Cs2Admin.API;
 using Cs2Admin.API.Configurations;
 using StackExchange.Redis;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/cs2admin-.txt", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -34,7 +45,12 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 32))));
 
 var jwtKey = builder.Configuration["JwtSettings:SecretKey"] ?? "MySuperSecretKeyForDevelopmentOnly123!";
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options => 
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddCookie("TempCookie")
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -45,6 +61,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
+    })
+    .AddSteam(options =>
+    {
+        options.ApplicationKey = builder.Configuration["Steam:ApiKey"];
+        options.SignInScheme = "TempCookie";
+        options.CallbackPath = "/api/v1/auth/steam/callback";
     });
 
 builder.Services.AddCors(options =>

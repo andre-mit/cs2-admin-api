@@ -23,6 +23,48 @@ public class ServerService(
 {
     private readonly ServersConfiguration _serversConfiguration = serversConfigurationOptions.Value;
 
+    public async Task UpdateBaseServerAsync(CancellationToken cancellationToken = default)
+    {
+        logger.LogInformation("Starting Base Server Update bypassing full hash validation...");
+
+        var containerId = "cs2-base-updater";
+        
+        try
+        {
+            // Remove if already exists from a previous failed run
+            await dockerClient.Containers.RemoveContainerAsync(containerId, new ContainerRemoveParameters { Force = true }, cancellationToken);
+        }
+        catch (DockerApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Ignore
+        }
+
+        var createParams = new CreateContainerParameters
+        {
+            Image = "joedwards32/cs2",
+            Name = containerId,
+            Env = ["STEAMAPPVALIDATE=0"], // Bypass validation
+            HostConfig = new HostConfig
+            {
+                Binds = [$"{_serversConfiguration.GameBaseDir}:/home/steam/cs2-dedicated"],
+                AutoRemove = true
+            },
+            // Just run it and exit gracefully once updated
+            Cmd = ["+quit"] 
+        };
+
+        logger.LogInformation("Creating temporary update container...");
+        var containerResponse = await dockerClient.Containers.CreateContainerAsync(createParams, cancellationToken);
+        
+        logger.LogInformation("Starting temporary update container...");
+        await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(), cancellationToken);
+
+        logger.LogInformation("Waiting for update container to finish...");
+        await dockerClient.Containers.WaitContainerAsync(containerResponse.ID, cancellationToken);
+
+        logger.LogInformation("Base Server Update completed successfully.");
+    }
+
     public async Task<ServerResult> CreateServerAsync(ServerRequest serverRequest, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("Starting dynamic server creation...");
@@ -59,23 +101,50 @@ public class ServerService(
         
         logger.LogInformation("Directories  created: [upper] {DirectoryUpper}, [work] {DirectoryWork}", instanceUpperPath, instanceWorkPath);
 
+        bool fastDlRequired = false;
         if (serverRequest.PluginSelections is { Count: > 0 })
         {
             var serializerOptions = new JsonSerializerOptions { WriteIndented = true };
 
             foreach (var selection in serverRequest.PluginSelections)
             {
-                var plugin = await dbContext.GamePlugins.FindAsync(new object[] { selection.PluginId }, cancellationToken);
+                var plugin = await dbContext.GamePlugins.FindAsync([selection.PluginId], cancellationToken);
                 if (plugin == null) continue;
 
                 var templatePluginPath = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
-                var destinationPluginPath = Path.Combine(
-                    instanceUpperPath,
-                    "game/csgo");
 
                 if (Directory.Exists(templatePluginPath))
                 {
-                    CopyDirectory(templatePluginPath, destinationPluginPath);
+                    var subdirs = Directory.GetDirectories(templatePluginPath).Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var structuralRoots = new[] { "addons", "cfg", "materials", "models", "sound" };
+                    bool hasStructuralRoots = subdirs.Intersect(structuralRoots).Any();
+
+                    if (hasStructuralRoots)
+                    {
+                        var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo");
+                        CopyDirectory(templatePluginPath, destinationPluginPath);
+                        
+                        if (subdirs.Contains("materials") || subdirs.Contains("models") || subdirs.Contains("sound"))
+                        {
+                            fastDlRequired = true;
+                            Directory.CreateDirectory(_serversConfiguration.FastDlBaseDir);
+                            
+                            foreach (var assetDir in new[] { "materials", "models", "sound" })
+                            {
+                                var assetSource = Path.Combine(templatePluginPath, assetDir);
+                                if (Directory.Exists(assetSource))
+                                {
+                                    CopyDirectory(assetSource, Path.Combine(_serversConfiguration.FastDlBaseDir, assetDir));
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo/addons/counterstrikesharp/plugins", plugin.Name);
+                        CopyDirectory(templatePluginPath, destinationPluginPath);
+                    }
+
                     logger.LogInformation("Plugin {PluginName} dynamically injected for instance {InstanceMemo}",
                         plugin.Name, token.Memo);
                 }
@@ -180,7 +249,13 @@ public class ServerService(
         }
         
         mergedEnvironment["CS2_MAXPLAYERS"] = serverRequest.MaxPlayers.ToString();
-        mergedEnvironment["CS2_ADDITIONAL_ARGS"] = "-tickrate 128";
+        
+        string additionalArgs = "-tickrate 128";
+        if (fastDlRequired && !string.IsNullOrWhiteSpace(_serversConfiguration.FastDlUrl))
+        {
+            additionalArgs += $" +sv_downloadurl \"{_serversConfiguration.FastDlUrl}\" +sv_allowdownload 1 +sv_allowupload 0";
+        }
+        mergedEnvironment["CS2_ADDITIONAL_ARGS"] = additionalArgs;
 
         mergedEnvironment["CS2_PORT"] = ports.GamePort.ToString();
         mergedEnvironment["TV_PORT"] = ports.TvPort.ToString();
@@ -248,6 +323,8 @@ public class ServerService(
         }
 
         await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Encoding.UTF8, cancellationToken);
+
+        await GeneratePreShAsync(instanceUpperPath, cancellationToken);
 
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
@@ -503,5 +580,43 @@ public class ServerService(
             sb.AppendLine($"{key} {valStr}");
         }
         return sb.ToString();
+    }
+
+    private async Task GeneratePreShAsync(string upperPath, CancellationToken cancellationToken)
+    {
+        var preShPath = Path.Combine(upperPath, "pre.sh");
+        
+        // Ensure strictly LF endings
+        var scriptContent = """
+            #!/bin/bash
+            # Redirect all output to Docker's PID 1 stdout so it appears in docker logs
+            exec > /proc/1/fd/1 2>&1
+            
+            echo "[pre.sh] Starting custom initialization..."
+            
+            GAMEINFO="/home/steam/cs2-dedicated/game/csgo/gameinfo.gi"
+            
+            # Programmatically inject metamod if not present
+            if [ -f "$GAMEINFO" ]; then
+                if ! grep -q "Game csgo/addons/metamod" "$GAMEINFO"; then
+                    echo "[pre.sh] Injecting Metamod into gameinfo.gi..."
+                    sed -i '/Game_LowViolence csgo_lv/a \t\t\t\tGame csgo/addons/metamod' "$GAMEINFO"
+                fi
+            fi
+            
+            echo "[pre.sh] Initialization complete."
+            """.Replace("\r\n", "\n");
+
+        await File.WriteAllTextAsync(preShPath, scriptContent, new UTF8Encoding(false), cancellationToken);
+
+#pragma warning disable CA1416
+        // Apply execution permissions programmatically via .NET 7+ API
+        File.SetUnixFileMode(preShPath, 
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | 
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute | 
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+#pragma warning restore CA1416
+            
+        logger.LogInformation("Successfully generated {PreShPath} with LF endings and execute permissions.", preShPath);
     }
 }
