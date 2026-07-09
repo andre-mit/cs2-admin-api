@@ -20,6 +20,7 @@ namespace Cs2Admin.API.Data
         public DbSet<SteamServerToken> SteamServerTokens { get; set; }
         public DbSet<GamePlugin> GamePlugins { get; set; }
         public DbSet<ServerPlugin> ServerPlugins { get; set; }
+        public DbSet<ServerPreset> ServerPresets { get; set; }
 
         public DbSet<User> Users { get; set; }
         public DbSet<MatchRoundTimeline> MatchRoundTimelines { get; set; }

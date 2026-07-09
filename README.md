@@ -18,6 +18,32 @@ This is the RESTful backend for the CS2 administration panel. Built with ASP.NET
 - **Management (CRUD):** Endpoints for managing Maps, Servers, Lobbies, Matches, and Teams.
 - **JWT Authentication:** Endpoint protection using Bearer Tokens.
 
+### CS2 Orchestration & FastDL Features
+- **Fast Base Updating:** Bypasses heavy hash validation by running `STEAMAPPVALIDATE=0` on short-lived containers for rapid server updates.
+- **Structured Plugin Ingestion:** Overlays structured plugin directories (`addons`, `cfg`, `materials`, `models`, `sound`) directly into the CS2 root using OverlayFS. Flat plugins automatically land in `counterstrikesharp/plugins/`.
+- **FastDL Extraction:** Automatically detects `materials`, `models`, and `sound` folders within plugins and synchronizes them to the `FastDlBaseDir` mapped volume for fast static serving via NGINX.
+- **Dynamic CVAR Injection:** Automatically detects FastDL presence and overrides `server.cfg` with `sv_downloadurl`, `sv_allowdownload 1` and `sv_allowupload 0`.
+- **Programmatic Pre-execution (`pre.sh`):** Handles `chmod +x` file modes, UNIX line endings (LF), stdout/stderr rerouting (`fd/1`), and dynamically patches `gameinfo.gi` with Metamod entries using `.NET` APIs natively instead of static shell scripts.
+- **Database-Backed Presets & Game Modes:** Modular configuration support mapped to dynamic `ServerPreset` entities.
+
+## Guide: Structured Plugins, FastDL & Database Presets
+
+### 1. Structured Plugins & Models (FastDL)
+When uploading a plugin `.zip` file via the dashboard (or API), the backend handles content smartly:
+- **Root-level folders** such as `addons`, `cfg`, `materials`, `models`, `sound`, and `particles` are extracted directly into a dedicated isolated directory for that plugin.
+- If **`models`**, **`materials`**, **`sound`**, or **`particles`** are present, they are *automatically copied* to the FastDL base directory (`FastDlBaseDir`), preserving their folder structure.
+- When a server is launched, the system checks if the server utilizes plugins containing FastDL assets. If true, the system dynamically injects `sv_downloadurl "http://<fastdl-domain>/"`, `sv_allowdownload 1`, and `sv_allowupload 0` into the server's `server.cfg`.
+- **Note for Custom Models (e.g. custom characters/skins):** Just compress the folders `models/`, `materials/`, etc., into a `.zip` and upload as a Plugin. Assign this plugin to a preset or server. Clients will automatically download the models upon connecting.
+
+### 2. Database-Backed Presets
+Instead of hardcoded constants, presets are managed dynamically in the database via the `ServerPresets` table and the `/api/v1/presets` endpoints.
+- **What they store:** A preset contains a name, an array of `PluginIds` to load, and a dictionary of `ServerVariables` (CVARs).
+- **Creating a Preset:** You can create "Surf", "Bhop", "Retakes", or "Competitive (FACEIT-style)" presets via the Frontend Dashboard.
+- **Example Surf Preset Configuration:**
+  - **Plugins:** `SurfTimer`
+  - **CVARs:** `sv_airaccelerate 1000`, `sv_enablebunnyhopping 1`, `sv_autobunnyhopping 1`, `sv_staminamax 0`, `CS2_GAMEALIAS casual`.
+- **Applying Presets:** When deploying a dynamic server in the UI, selecting a preset instantly populates the plugins and CVARs required. The underlying container is built specifically tailored to these settings in seconds.
+
 ## Setup and Installation
 
 1. Make sure you have the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) installed.
