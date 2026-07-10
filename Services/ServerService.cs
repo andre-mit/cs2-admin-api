@@ -43,18 +43,32 @@ public class ServerService(
         {
             Image = "joedwards32/cs2",
             Name = containerId,
-            Env = ["STEAMAPPVALIDATE=0"], // Bypass validation
+            Env = ["STEAMAPPVALIDATE=0", "CS2_ADDITIONAL_ARGS=+quit"], // Bypass validation and quit after launch
             HostConfig = new HostConfig
             {
                 Binds = [$"{_serversConfiguration.GameBaseDir}:/home/steam/cs2-dedicated"],
                 AutoRemove = true
-            },
-            // Just run it and exit gracefully once updated
-            Cmd = ["+quit"] 
+            }
         };
 
         logger.LogInformation("Creating temporary update container...");
-        var containerResponse = await dockerClient.Containers.CreateContainerAsync(createParams, cancellationToken);
+        CreateContainerResponse containerResponse;
+        try
+        {
+            containerResponse = await dockerClient.Containers.CreateContainerAsync(createParams, cancellationToken);
+        }
+        catch (DockerApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            logger.LogInformation("Image joedwards32/cs2 not found. Pulling from Docker Hub...");
+            await dockerClient.Images.CreateImageAsync(
+                new ImagesCreateParameters { FromImage = "joedwards32/cs2", Tag = "latest" },
+                null,
+                new Progress<JSONMessage>(msg => { }),
+                cancellationToken);
+            
+            logger.LogInformation("Image pulled successfully. Retrying container creation...");
+            containerResponse = await dockerClient.Containers.CreateContainerAsync(createParams, cancellationToken);
+        }
         
         logger.LogInformation("Starting temporary update container...");
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(), cancellationToken);
