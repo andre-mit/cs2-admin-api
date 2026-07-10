@@ -56,6 +56,20 @@ namespace Cs2Admin.API.Controllers
             }
         }
 
+        [HttpPost("{id}/upload-chunk")]
+        public async Task<IActionResult> UploadChunk(int id, [FromForm] int chunkIndex, [FromForm] int totalChunks, IFormFile file)
+        {
+            try
+            {
+                var plugin = await _pluginService.UploadChunkAsync(id, file, chunkIndex, totalChunks, HttpContext.RequestAborted);
+                return Ok(plugin);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
