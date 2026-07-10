@@ -18,6 +18,7 @@ public class ServerService(
     IDockerClient dockerClient,
     IOptions<ServersConfiguration> serversConfigurationOptions,
     IConfiguration configuration,
+    BaseUpdateState baseUpdateState,
     ILogger<ServerService> logger)
     : IServerService
 {
@@ -73,9 +74,45 @@ public class ServerService(
         logger.LogInformation("Starting temporary update container...");
         await dockerClient.Containers.StartContainerAsync(containerResponse.ID, new ContainerStartParameters(), cancellationToken);
 
+        baseUpdateState.Status = "downloading";
+
+        logger.LogInformation("Attaching to container logs...");
+        using var logStream = await dockerClient.Containers.GetContainerLogsAsync(containerResponse.ID, false, new ContainerLogsParameters
+        {
+            ShowStdout = true,
+            ShowStderr = true,
+            Follow = true
+        }, cancellationToken);
+
+        var regex = new System.Text.RegularExpressions.Regex(@"progress:\s+(\d+\.\d+)\s+\(([^/]+)\s+/\s+([^\)]+)\)");
+        var buffer = new byte[81920];
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var result = await logStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+            if (result.EOF) break;
+
+            var line = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+            
+            // Log output can contain multiple matches
+            var matches = regex.Matches(line);
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                if (match.Success)
+                {
+                    if (double.TryParse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture, out var prog))
+                        baseUpdateState.ProgressPercentage = prog;
+                    
+                    baseUpdateState.DownloadedBytes = match.Groups[2].Value.Trim();
+                    baseUpdateState.TotalBytes = match.Groups[3].Value.Trim();
+                }
+            }
+        }
+
         logger.LogInformation("Waiting for update container to finish...");
         await dockerClient.Containers.WaitContainerAsync(containerResponse.ID, cancellationToken);
 
+        baseUpdateState.Reset();
         logger.LogInformation("Base Server Update completed successfully.");
     }
 

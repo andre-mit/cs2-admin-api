@@ -20,6 +20,8 @@ namespace Cs2Admin.API.Controllers
         IRconService rconService,
         IServerService serverService,
         IConfiguration configuration,
+        Cs2Admin.API.Services.BaseUpdateState baseUpdateState,
+        IServiceScopeFactory scopeFactory,
         ILogger<ServersController> logger) : ControllerBase
     {
 
@@ -249,53 +251,100 @@ namespace Cs2Admin.API.Controllers
         }
 
         [HttpPost("update-base")]
-        public async Task<IActionResult> UpdateBaseServer(CancellationToken cancellationToken)
+        public IActionResult UpdateBaseServer()
         {
-            var runningServers = await context.Servers
-                .Where(s => s.IsDynamic && !string.IsNullOrEmpty(s.ContainerId))
-                .ToListAsync(cancellationToken);
-
-            var stoppedServerIds = new List<string>();
-
-            // 1. Stop all dynamic servers
-            foreach (var server in runningServers)
+            if (baseUpdateState.IsUpdating)
             {
+                return BadRequest(new { message = "Update is already in progress." });
+            }
+
+            baseUpdateState.IsUpdating = true;
+            baseUpdateState.Status = "stopping_servers";
+
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var scopedContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var scopedServerService = scope.ServiceProvider.GetRequiredService<IServerService>();
+                var scopedLogger = scope.ServiceProvider.GetRequiredService<ILogger<ServersController>>();
+
                 try
                 {
-                    await serverService.StopServerAsync(server.ContainerId!, cancellationToken);
-                    stoppedServerIds.Add(server.ContainerId!);
+                    var runningServers = await scopedContext.Servers
+                        .Where(s => s.IsDynamic && !string.IsNullOrEmpty(s.ContainerId))
+                        .ToListAsync();
+
+                    var stoppedServerIds = new List<string>();
+
+                    foreach (var server in runningServers)
+                    {
+                        try
+                        {
+                            await scopedServerService.StopServerAsync(server.ContainerId!, CancellationToken.None);
+                            stoppedServerIds.Add(server.ContainerId!);
+                        }
+                        catch (Exception ex)
+                        {
+                            scopedLogger.LogWarning(ex, "Could not stop server {ContainerId} or it was already stopped.", server.ContainerId);
+                        }
+                    }
+
+                    await scopedServerService.UpdateBaseServerAsync(CancellationToken.None);
+
+                    baseUpdateState.Status = "restarting_servers";
+                    foreach (var containerId in stoppedServerIds)
+                    {
+                        try
+                        {
+                            await scopedServerService.StartServerAsync(containerId, CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            scopedLogger.LogError(ex, "Failed to automatically restart server {ContainerId} after update.", containerId);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Could not stop server {ContainerId} or it was already stopped.", server.ContainerId);
+                    scopedLogger.LogError(ex, "Background base server update failed.");
                 }
-            }
-
-            // 2. Run the update
-            try
-            {
-                await serverService.UpdateBaseServerAsync(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to update base server.");
-                return StatusCode(500, new { message = "Failed to update base game. Check logs for details." });
-            }
-
-            // 3. Restart previously stopped servers
-            foreach (var containerId in stoppedServerIds)
-            {
-                try
+                finally
                 {
-                    await serverService.StartServerAsync(containerId, cancellationToken);
+                    baseUpdateState.Reset();
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to automatically restart server {ContainerId} after update.", containerId);
-                }
-            }
+            });
 
-            return Ok(new { message = "Base game updated successfully and dynamic servers restarted." });
+            return Accepted(new { message = "Base game update started in the background." });
+        }
+
+        [HttpGet("update-base-stream")]
+        public async Task GetUpdateBaseStream(CancellationToken cancellationToken)
+        {
+            Response.Headers.Append("Content-Type", "text/event-stream");
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("Connection", "keep-alive");
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var data = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    isUpdating = baseUpdateState.IsUpdating,
+                    progressPercentage = baseUpdateState.ProgressPercentage,
+                    downloadedBytes = baseUpdateState.DownloadedBytes,
+                    totalBytes = baseUpdateState.TotalBytes,
+                    status = baseUpdateState.Status
+                });
+
+                await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+
+                if (!baseUpdateState.IsUpdating)
+                {
+                    break;
+                }
+
+                await Task.Delay(5000, cancellationToken);
+            }
         }
 
         private bool ServerExists(int id)

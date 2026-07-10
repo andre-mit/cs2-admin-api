@@ -2,6 +2,7 @@ using Cs2Admin.API.Data;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Cs2Admin.API.Services;
+using Cs2Admin.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -67,7 +68,8 @@ builder.Services.AddAuthentication(options =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                if (!string.IsNullOrEmpty(accessToken) && 
+                    (path.StartsWithSegments("/hubs") || path.StartsWithSegments("/api/v1/servers/update-base-stream")))
                 {
                     context.Token = accessToken;
                 }
@@ -118,6 +120,7 @@ builder.Services.AddSingleton<IAmazonS3>(new AmazonS3Client(
 var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
 
+builder.Services.AddSingleton<BaseUpdateState>();
 
 builder.Services.AddControllers();
 
