@@ -6,28 +6,19 @@ namespace Cs2Admin.API.Controllers;
 
 [ApiController]
 [Route("api/v1/matchzy")]
-public class MatchZyController : ControllerBase
+public class MatchZyController(IMatchZyService matchZyService, ILogger<MatchZyController> logger) : ControllerBase
 {
-    private readonly IMatchZyService _matchZyService;
-    private readonly ILogger<MatchZyController> _logger;
-
-    public MatchZyController(IMatchZyService matchZyService, ILogger<MatchZyController> logger)
-    {
-        _matchZyService = matchZyService;
-        _logger = logger;
-    }
-
     [HttpPost("events")]
     public async Task<IActionResult> ReceiveEvent([FromBody] JsonElement payload)
     {
         try
         {
-            await _matchZyService.ProcessEventAsync(payload);
+            await matchZyService.ProcessEventAsync(payload);
             return Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process MatchZy event.");
+            logger.LogError(ex, "Failed to process MatchZy event.");
             return BadRequest();
         }
     }
@@ -50,7 +41,7 @@ public class MatchZyController : ControllerBase
             return BadRequest("Invalid MatchId.");
 
         using var stream = file.OpenReadStream();
-        var result = await _matchZyService.UploadDemoAsync(matchId, fileName, stream, file.ContentType);
+        var result = await matchZyService.UploadDemoAsync(matchId, fileName, stream, file.ContentType);
 
         return result != null
             ? Ok(new { success = true })

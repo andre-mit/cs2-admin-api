@@ -8,20 +8,13 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers;
 
 [ApiController]
 [Route("api/v1/auth")]
-public class AuthController : ControllerBase
+public class AuthController(IUserRepository userRepository, IConfiguration configuration) : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
-    private readonly IConfiguration _configuration;
-
-    public AuthController(ApplicationDbContext context, IConfiguration configuration)
-    {
-        _context = context;
-        _configuration = configuration;
-    }
 
     [HttpGet("steam")]
     public IActionResult SteamLogin([FromQuery] string? returnUrl = null)
@@ -56,7 +49,9 @@ public class AuthController : ControllerBase
         var nameClaim = result.Principal.FindFirst(ClaimTypes.Name)?.Value ?? $"Player_{steamId.Substring(steamId.Length - 4)}";
 
         // Create or update user
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.SteamId == steamId);
+        var users = await userRepository.FindAsync(u => u.SteamId == steamId);
+        var user = users.FirstOrDefault();
+        
         if (user == null)
         {
             user = new User
@@ -66,7 +61,7 @@ public class AuthController : ControllerBase
                 RegisteredAt = DateTime.UtcNow,
                 Elo = 1000
             };
-            _context.Users.Add(user);
+            await userRepository.AddAsync(user);
         }
         else
         {
@@ -74,7 +69,7 @@ public class AuthController : ControllerBase
             // Steam OpenID provides some basic claims, but Steam Web API is better for avatars. We leave it for now.
         }
 
-        await _context.SaveChangesAsync();
+        await userRepository.SaveChangesAsync();
 
         // Sign out of the temporary cookie
         await HttpContext.SignOutAsync("TempCookie");
@@ -82,7 +77,7 @@ public class AuthController : ControllerBase
         // Generate JWT
         var token = GenerateJwtToken(user);
 
-        var frontendUrl = _configuration["FrontendUrl"] ?? "http://localhost:3000";
+        var frontendUrl = configuration["FrontendUrl"] ?? "http://localhost:3000";
         var finalRedirect = string.IsNullOrEmpty(returnUrl) ? $"{frontendUrl}/auth/success?token={token}" : $"{frontendUrl}{returnUrl}?token={token}";
 
         return Redirect(finalRedirect);
@@ -90,7 +85,7 @@ public class AuthController : ControllerBase
 
     private string GenerateJwtToken(User user)
     {
-        var secretKey = _configuration["JwtSettings:SecretKey"] ?? "MySuperSecretKeyForDevelopmentOnly123!";
+        var secretKey = configuration["JwtSettings:SecretKey"] ?? "MySuperSecretKeyForDevelopmentOnly123!";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

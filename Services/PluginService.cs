@@ -34,6 +34,28 @@ namespace Cs2Admin.API.Services
             return plugin;
         }
 
+        public async Task<GamePlugin> UpdateAsync(int id, GamePlugin updatedPlugin, CancellationToken ct = default)
+        {
+            var plugin = await context.GamePlugins.FindAsync(new object[] { id }, ct);
+            if (plugin == null) throw new Exception("Plugin not found");
+
+            var oldDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+            
+            plugin.Name = updatedPlugin.Name;
+            plugin.Description = updatedPlugin.Description;
+            plugin.ConfigFilesJson = updatedPlugin.ConfigFilesJson;
+
+            var newDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+
+            if (oldDir != newDir && Directory.Exists(oldDir))
+            {
+                Directory.Move(oldDir, newDir);
+            }
+
+            await context.SaveChangesAsync(ct);
+            return plugin;
+        }
+
         public async Task<GamePlugin> UploadAsync(int pluginId, IFormFile zipFile, CancellationToken ct = default)
         {
             var plugin = await context.GamePlugins.FindAsync(new object[] { pluginId }, ct);
@@ -156,6 +178,104 @@ namespace Cs2Admin.API.Services
             }
 
             return plugin;
+        }
+
+        public async Task<FileNode?> GetFileTreeAsync(int id, CancellationToken ct = default)
+        {
+            var plugin = await context.GamePlugins.FindAsync([id], ct);
+            if (plugin == null) return null;
+
+            var pluginDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+            if (!Directory.Exists(pluginDir)) return null;
+
+            return BuildFileTree(new DirectoryInfo(pluginDir), pluginDir);
+        }
+
+        private FileNode BuildFileTree(DirectoryInfo dirInfo, string basePluginDir)
+        {
+            var node = new FileNode
+            {
+                Name = dirInfo.Name,
+                Path = Path.GetRelativePath(basePluginDir, dirInfo.FullName).Replace("\\", "/"),
+                IsDirectory = true,
+                Children = new List<FileNode>()
+            };
+
+            if (node.Path == ".") node.Path = ""; // Root
+
+            foreach (var dir in dirInfo.GetDirectories())
+            {
+                node.Children.Add(BuildFileTree(dir, basePluginDir));
+            }
+
+            foreach (var file in dirInfo.GetFiles())
+            {
+                node.Children.Add(new FileNode
+                {
+                    Name = file.Name,
+                    Path = Path.GetRelativePath(basePluginDir, file.FullName).Replace("\\", "/"),
+                    IsDirectory = false
+                });
+            }
+
+            return node;
+        }
+
+        private string EnsureSafePath(string baseDir, string relativePath)
+        {
+            if (relativePath.Contains("..")) throw new Exception("Invalid path");
+            var fullPath = Path.GetFullPath(Path.Combine(baseDir, relativePath));
+            if (!fullPath.StartsWith(Path.GetFullPath(baseDir))) throw new Exception("Path traversal detected");
+            return fullPath;
+        }
+
+        public async Task<string?> GetFileContentAsync(int id, string path, CancellationToken ct = default)
+        {
+            var plugin = await context.GamePlugins.FindAsync([id], ct);
+            if (plugin == null) return null;
+
+            var pluginDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+            if (!Directory.Exists(pluginDir)) return null;
+
+            var fullPath = EnsureSafePath(pluginDir, path);
+            if (!File.Exists(fullPath)) return null;
+
+            return await File.ReadAllTextAsync(fullPath, ct);
+        }
+
+        public async Task SaveFileContentAsync(int id, string path, string content, CancellationToken ct = default)
+        {
+            var plugin = await context.GamePlugins.FindAsync([id], ct);
+            if (plugin == null) throw new Exception("Plugin not found");
+
+            var pluginDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+            var fullPath = EnsureSafePath(pluginDir, path);
+
+            var dir = Path.GetDirectoryName(fullPath);
+            if (dir != null && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            await File.WriteAllTextAsync(fullPath, content, ct);
+        }
+
+        public async Task DeleteFileAsync(int id, string path, CancellationToken ct = default)
+        {
+            var plugin = await context.GamePlugins.FindAsync([id], ct);
+            if (plugin == null) throw new Exception("Plugin not found");
+
+            var pluginDir = Path.Combine(_serversConfiguration.PluginsBaseDir, plugin.Name);
+            var fullPath = EnsureSafePath(pluginDir, path);
+
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+            else if (Directory.Exists(fullPath))
+            {
+                Directory.Delete(fullPath, true);
+            }
         }
 
         public async Task DeleteAsync(int id, CancellationToken ct = default)

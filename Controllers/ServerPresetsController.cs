@@ -5,24 +5,19 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/v1/presets")]
-    public class ServerPresetsController : ControllerBase
+    public class ServerPresetsController(IServerPresetRepository serverPresetRepository) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-
-        public ServerPresetsController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ServerPresetDto>>> GetPresets()
         {
-            var presets = await _context.ServerPresets.ToListAsync();
+            var presets = await serverPresetRepository.GetAllAsync();
             return Ok(presets.Select(p => new ServerPresetDto
             {
                 Id = p.Id,
@@ -36,7 +31,7 @@ namespace Cs2Admin.API.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<ServerPresetDto>> GetPreset(int id)
         {
-            var preset = await _context.ServerPresets.FindAsync(id);
+            var preset = await serverPresetRepository.GetByIdAsync(id);
 
             if (preset == null)
             {
@@ -64,8 +59,8 @@ namespace Cs2Admin.API.Controllers
                 PluginIds = dto.PluginIds
             };
 
-            _context.ServerPresets.Add(preset);
-            await _context.SaveChangesAsync();
+            await serverPresetRepository.AddAsync(preset);
+            await serverPresetRepository.SaveChangesAsync();
 
             var result = new ServerPresetDto
             {
@@ -82,7 +77,7 @@ namespace Cs2Admin.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdatePreset(int id, CreateServerPresetDto dto)
         {
-            var preset = await _context.ServerPresets.FindAsync(id);
+            var preset = await serverPresetRepository.GetByIdAsync(id);
 
             if (preset == null)
             {
@@ -94,7 +89,8 @@ namespace Cs2Admin.API.Controllers
             preset.ServerVariables = dto.ServerVariables;
             preset.PluginIds = dto.PluginIds;
 
-            await _context.SaveChangesAsync();
+            serverPresetRepository.Update(preset);
+            await serverPresetRepository.SaveChangesAsync();
 
             return NoContent();
         }
@@ -102,14 +98,14 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePreset(int id)
         {
-            var preset = await _context.ServerPresets.FindAsync(id);
+            var preset = await serverPresetRepository.GetByIdAsync(id);
             if (preset == null)
             {
                 return NotFound();
             }
 
-            _context.ServerPresets.Remove(preset);
-            await _context.SaveChangesAsync();
+            serverPresetRepository.Remove(preset);
+            await serverPresetRepository.SaveChangesAsync();
 
             return NoContent();
         }

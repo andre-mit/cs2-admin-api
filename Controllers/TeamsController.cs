@@ -8,30 +8,25 @@ using Microsoft.EntityFrameworkCore;
 
 using Microsoft.AspNetCore.Authorization;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
-    public class TeamsController : ControllerBase
+    public class TeamsController(ITeamRepository teamRepository) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-
-        public TeamsController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Team>>> GetTeams()
         {
-            return await _context.Teams.ToListAsync();
+            return Ok(await teamRepository.GetAllAsync());
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<Team>> GetTeam(int id)
         {
-            var team = await _context.Teams.FindAsync(id);
+            var team = await teamRepository.GetByIdAsync(id);
 
             if (team == null)
             {
@@ -44,8 +39,8 @@ namespace Cs2Admin.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Team>> CreateTeam(Team team)
         {
-            _context.Teams.Add(team);
-            await _context.SaveChangesAsync();
+            await teamRepository.AddAsync(team);
+            await teamRepository.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetTeam), new { id = team.Id }, team);
         }
@@ -58,15 +53,15 @@ namespace Cs2Admin.API.Controllers
                 return BadRequest();
             }
 
-            _context.Entry(team).State = EntityState.Modified;
+            teamRepository.Update(team);
 
             try
             {
-                await _context.SaveChangesAsync();
+                await teamRepository.SaveChangesAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!TeamExists(id))
+                if (!await TeamExistsAsync(id))
                 {
                     return NotFound();
                 }
@@ -82,21 +77,21 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTeam(int id)
         {
-            var team = await _context.Teams.FindAsync(id);
+            var team = await teamRepository.GetByIdAsync(id);
             if (team == null)
             {
                 return NotFound();
             }
 
-            _context.Teams.Remove(team);
-            await _context.SaveChangesAsync();
+            teamRepository.Remove(team);
+            await teamRepository.SaveChangesAsync();
 
             return NoContent();
         }
 
-        private bool TeamExists(int id)
+        private async Task<bool> TeamExistsAsync(int id)
         {
-            return _context.Teams.Any(e => e.Id == id);
+            return await teamRepository.ExistsAsync(e => e.Id == id);
         }
     }
 }

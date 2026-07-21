@@ -7,33 +7,28 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/v1/steam-tokens")]
-    public class SteamTokensController : ControllerBase
+    public class SteamTokensController(
+        ISteamTokenRepository steamTokenRepository,
+        ISteamTokenService steamTokenService) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly ISteamTokenService _steamTokenService;
-
-        public SteamTokensController(ApplicationDbContext context, ISteamTokenService steamTokenService)
-        {
-            _context = context;
-            _steamTokenService = steamTokenService;
-        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<SteamServerToken>>> GetTokens()
         {
-            return await _context.SteamServerTokens.ToListAsync();
+            return Ok(await steamTokenRepository.GetAllAsync());
         }
 
         [HttpPost]
         public async Task<ActionResult<SteamServerToken>> CreateToken([FromBody] SteamServerToken tokenRequest)
         {
-            var tokenId = await _steamTokenService.CreateTokenAsync(tokenRequest.Memo, tokenRequest.Token, default);
-            var createdToken = await _context.SteamServerTokens.FindAsync(tokenId);
+            var tokenId = await steamTokenService.CreateTokenAsync(tokenRequest.Memo, tokenRequest.Token, default);
+            var createdToken = await steamTokenRepository.GetByIdAsync(tokenId);
             
             if (createdToken == null)
                 return StatusCode(500, "Failed to create token.");
@@ -44,14 +39,14 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteToken(int id)
         {
-            var token = await _context.SteamServerTokens.FindAsync(id);
+            var token = await steamTokenRepository.GetByIdAsync(id);
             if (token == null)
             {
                 return NotFound();
             }
 
-            _context.SteamServerTokens.Remove(token);
-            await _context.SaveChangesAsync();
+            steamTokenRepository.Remove(token);
+            await steamTokenRepository.SaveChangesAsync();
 
             return NoContent();
         }

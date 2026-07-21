@@ -7,14 +7,8 @@ namespace Cs2Admin.API.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/v1/profile")]
-public class ProfileController : ControllerBase
+public class ProfileController(IProfileService profileService) : ControllerBase
 {
-    private readonly IProfileService _profileService;
-
-    public ProfileController(IProfileService profileService)
-    {
-        _profileService = profileService;
-    }
 
     [HttpGet]
     public async Task<IActionResult> GetProfile()
@@ -23,7 +17,7 @@ public class ProfileController : ControllerBase
         if (string.IsNullOrEmpty(steamId))
             return Unauthorized();
 
-        var profile = await _profileService.GetProfileAsync(steamId);
+        var profile = await profileService.GetProfileAsync(steamId);
         return profile != null ? Ok(profile) : NotFound();
     }
 
@@ -37,7 +31,7 @@ public class ProfileController : ControllerBase
         if (request.InternalNick != null && request.InternalNick.Length > 100)
             return BadRequest("Nickname must be at most 100 characters.");
 
-        var result = await _profileService.UpdateProfileAsync(steamId, request.InternalNick);
+        var result = await profileService.UpdateProfileAsync(steamId, request.InternalNick);
         return result != null ? Ok(result) : NotFound();
     }
 }

@@ -13,6 +13,7 @@ using Cs2Admin.API.Configurations;
 using StackExchange.Redis;
 using Serilog;
 using Microsoft.AspNetCore.Http.Features;
+using Cs2Admin.API.Infrastructure.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -158,6 +159,8 @@ else
 {
     app.UseCors("ProductionPolicy");
 }
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

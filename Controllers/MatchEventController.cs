@@ -7,20 +7,16 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [ApiController]
     [Route("api/v1/match")]
-    public class MatchEventController : ControllerBase
+    public class MatchEventController(
+        ILogger<MatchEventController> logger,
+        IMatchEventLogRepository matchEventLogRepository,
+        IMatchPlayerStatRepository matchPlayerStatRepository) : ControllerBase
     {
-        private readonly ILogger<MatchEventController> _logger;
-        private readonly ApplicationDbContext _context;
-
-        public MatchEventController(ILogger<MatchEventController> logger, ApplicationDbContext context)
-        {
-            _logger = logger;
-            _context = context;
-        }
 
         [HttpPost("event")]
         public async Task<IActionResult> HandleMatchEvent([FromBody] JsonElement payload)
@@ -31,7 +27,7 @@ namespace Cs2Admin.API.Controllers
                 var matchIdStr = payload.GetProperty("matchid").GetString();
                 int matchId = int.TryParse(matchIdStr, out var id) ? id : 0;
 
-                _logger.LogInformation("Received match event '{Event}' for match {MatchId}", eventData, matchId);
+                logger.LogInformation("Received match event '{Event}' for match {MatchId}", eventData, matchId);
 
                 // 1. Log the raw event for debugging or future processing
                 var log = new MatchEventLog
@@ -40,7 +36,7 @@ namespace Cs2Admin.API.Controllers
                     EventType = eventData ?? "unknown",
                     RawEventData = payload.GetRawText()
                 };
-                _context.MatchEventLogs.Add(log);
+                await matchEventLogRepository.AddAsync(log);
 
                 // 2. Parse specific events
                 if (eventData == "player_death")
@@ -48,13 +44,13 @@ namespace Cs2Admin.API.Controllers
                     await HandlePlayerDeath(matchId, payload);
                 }
                 
-                await _context.SaveChangesAsync();
+                await matchEventLogRepository.SaveChangesAsync();
 
                 return Ok(new { success = true });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to parse or handle match event");
+                logger.LogError(ex, "Failed to parse or handle match event");
                 return BadRequest(new { success = false, error = "Invalid payload" });
             }
         }
@@ -107,8 +103,7 @@ namespace Cs2Admin.API.Controllers
 
         private async Task<MatchPlayerStat> GetOrCreatePlayerStat(int matchId, string steamId, string name)
         {
-            var stat = await _context.MatchPlayerStats
-                .FirstOrDefaultAsync(s => s.MatchId == matchId && s.SteamId == steamId);
+            var stat = await matchPlayerStatRepository.GetByMatchAndSteamIdAsync(matchId, steamId);
 
             if (stat == null)
             {
@@ -118,7 +113,7 @@ namespace Cs2Admin.API.Controllers
                     SteamId = steamId,
                     Name = name
                 };
-                _context.MatchPlayerStats.Add(stat);
+                await matchPlayerStatRepository.AddAsync(stat);
             }
 
             return stat;

@@ -6,34 +6,28 @@ using StackExchange.Redis;
 
 using Microsoft.AspNetCore.Authorization;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
-    public class MapsController : ControllerBase
+    public class MapsController(
+        IMapRepository mapRepository,
+        IConnectionMultiplexer redis,
+        IConfiguration config) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IConnectionMultiplexer _redis;
-        private readonly IConfiguration _config;
-
-        public MapsController(ApplicationDbContext context, IConnectionMultiplexer redis, IConfiguration config)
-        {
-            _context = context;
-            _redis = redis;
-            _config = config;
-        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<GameMap>>> GetMaps()
         {
-            return await _context.Maps.ToListAsync();
+            return Ok(await mapRepository.GetAllAsync());
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<GameMap>> GetMap(int id)
         {
-            var map = await _context.Maps.FindAsync(id);
+            var map = await mapRepository.GetByIdAsync(id);
             if (map == null) return NotFound();
             return map;
         }
@@ -41,8 +35,8 @@ namespace Cs2Admin.API.Controllers
         [HttpPost]
         public async Task<ActionResult<GameMap>> CreateMap(GameMap map)
         {
-            _context.Maps.Add(map);
-            await _context.SaveChangesAsync();
+            await mapRepository.AddAsync(map);
+            await mapRepository.SaveChangesAsync();
             await ProtectS3Keys(map);
             return CreatedAtAction(nameof(GetMap), new { id = map.Id }, map);
         }
@@ -52,16 +46,16 @@ namespace Cs2Admin.API.Controllers
         {
             if (id != map.Id) return BadRequest();
 
-            _context.Entry(map).State = EntityState.Modified;
+            mapRepository.Update(map);
             
             try
             {
-                await _context.SaveChangesAsync();
+                await mapRepository.SaveChangesAsync();
                 await ProtectS3Keys(map);
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!_context.Maps.Any(e => e.Id == id)) return NotFound();
+                if (!await mapRepository.ExistsAsync(e => e.Id == id)) return NotFound();
                 else throw;
             }
 
@@ -71,20 +65,20 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteMap(int id)
         {
-            var map = await _context.Maps.FindAsync(id);
+            var map = await mapRepository.GetByIdAsync(id);
             if (map == null) return NotFound();
 
-            _context.Maps.Remove(map);
-            await _context.SaveChangesAsync();
+            mapRepository.Remove(map);
+            await mapRepository.SaveChangesAsync();
 
             return NoContent();
         }
 
         private async Task ProtectS3Keys(GameMap map)
         {
-            var db = _redis.GetDatabase();
-            var serviceUrl = _config["S3:ServiceUrl"] ?? "";
-            var bucket = _config["S3:BucketName"] ?? "cs2";
+            var db = redis.GetDatabase();
+            var serviceUrl = config["S3:ServiceUrl"] ?? "";
+            var bucket = config["S3:BucketName"] ?? "cs2";
             var prefix = $"{serviceUrl}/{bucket}/";
 
             foreach (var url in new[] { map.ImageUrl, map.BadgeUrl })

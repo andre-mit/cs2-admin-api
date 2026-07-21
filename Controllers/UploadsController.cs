@@ -16,18 +16,8 @@ namespace Cs2Admin.API.Controllers
     [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
-    public class UploadsController : ControllerBase
+    public class UploadsController(IAmazonS3 s3, IConnectionMultiplexer redis, IConfiguration config) : ControllerBase
     {
-        private readonly IAmazonS3 _s3;
-        private readonly IConnectionMultiplexer _redis;
-        private readonly IConfiguration _config;
-
-        public UploadsController(IAmazonS3 s3, IConnectionMultiplexer redis, IConfiguration config)
-        {
-            _s3 = s3;
-            _redis = redis;
-            _config = config;
-        }
 
         [HttpGet("presigned-url")]
         public async Task<IActionResult> GetPresignedUrl(
@@ -36,7 +26,7 @@ namespace Cs2Admin.API.Controllers
             [FromQuery] string mapName,
             [FromQuery] string imageType)
         {
-            var bucket = _config["S3:BucketName"] ?? "cs2";
+            var bucket = config["S3:BucketName"] ?? "cs2";
             
             var sanitizedMapName = string.IsNullOrWhiteSpace(mapName) 
                 ? "unnamed" 
@@ -65,7 +55,7 @@ namespace Cs2Admin.API.Controllers
                     ]
                 }}";
 
-                await _s3.PutBucketPolicyAsync(new PutBucketPolicyRequest
+                await s3.PutBucketPolicyAsync(new PutBucketPolicyRequest
                 {
                     BucketName = bucket,
                     Policy = policy
@@ -85,13 +75,13 @@ namespace Cs2Admin.API.Controllers
                 ContentType = contentType
             };
 
-            var presignedUrl = await _s3.GetPreSignedURLAsync(request);
+            var presignedUrl = await s3.GetPreSignedURLAsync(request);
 
-            var db = _redis.GetDatabase();
+            var db = redis.GetDatabase();
             var score = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await db.SortedSetAddAsync("pending_uploads", key, score);
 
-            var serviceUrl = _config["S3:ServiceUrl"] ?? "";
+            var serviceUrl = config["S3:ServiceUrl"] ?? "";
             var publicUrl = $"{serviceUrl}/{bucket}/{key}";
 
             return Ok(new { uploadUrl = presignedUrl, publicUrl, s3Key = key });
@@ -108,7 +98,7 @@ namespace Cs2Admin.API.Controllers
                 return BadRequest("No file uploaded.");
             }
 
-            var bucket = _config["S3:BucketName"] ?? "cs2";
+            var bucket = config["S3:BucketName"] ?? "cs2";
             
             var sanitizedMapName = string.IsNullOrWhiteSpace(mapName) 
                 ? "unnamed" 
@@ -137,7 +127,7 @@ namespace Cs2Admin.API.Controllers
                     ]
                 }}";
 
-                await _s3.PutBucketPolicyAsync(new PutBucketPolicyRequest
+                await s3.PutBucketPolicyAsync(new PutBucketPolicyRequest
                 {
                     BucketName = bucket,
                     Policy = policy
@@ -160,14 +150,14 @@ namespace Cs2Admin.API.Controllers
                         ContentType = file.ContentType
                     };
 
-                    await _s3.PutObjectAsync(request);
+                    await s3.PutObjectAsync(request);
                 }
 
-                var db = _redis.GetDatabase();
+                var db = redis.GetDatabase();
                 var score = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 await db.SortedSetAddAsync("pending_uploads", key, score);
 
-                var serviceUrl = _config["S3:ServiceUrl"] ?? "";
+                var serviceUrl = config["S3:ServiceUrl"] ?? "";
                 var publicUrl = $"{serviceUrl}/{bucket}/{key}";
 
                 return Ok(new { publicUrl, s3Key = key });

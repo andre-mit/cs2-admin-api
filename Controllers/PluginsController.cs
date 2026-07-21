@@ -11,26 +11,19 @@ namespace Cs2Admin.API.Controllers
     [ApiController]
     [Route("api/v1/[controller]")]
     [Authorize]
-    public class PluginsController : ControllerBase
+    public class PluginsController(IPluginService pluginService) : ControllerBase
     {
-        private readonly IPluginService _pluginService;
-
-        public PluginsController(IPluginService pluginService)
-        {
-            _pluginService = pluginService;
-        }
-
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var plugins = await _pluginService.GetAllAsync(HttpContext.RequestAborted);
+            var plugins = await pluginService.GetAllAsync(HttpContext.RequestAborted);
             return Ok(plugins);
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var plugin = await _pluginService.GetByIdAsync(id, HttpContext.RequestAborted);
+            var plugin = await pluginService.GetByIdAsync(id, HttpContext.RequestAborted);
             if (plugin == null) return NotFound();
             return Ok(plugin);
         }
@@ -38,8 +31,22 @@ namespace Cs2Admin.API.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] GamePlugin plugin)
         {
-            var created = await _pluginService.CreateAsync(plugin, HttpContext.RequestAborted);
+            var created = await pluginService.CreateAsync(plugin, HttpContext.RequestAborted);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] GamePlugin plugin)
+        {
+            try
+            {
+                var updated = await pluginService.UpdateAsync(id, plugin, HttpContext.RequestAborted);
+                return Ok(updated);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
         }
 
         [HttpPost("{id}/upload")]
@@ -47,7 +54,7 @@ namespace Cs2Admin.API.Controllers
         {
             try
             {
-                var plugin = await _pluginService.UploadAsync(id, file, HttpContext.RequestAborted);
+                var plugin = await pluginService.UploadAsync(id, file, HttpContext.RequestAborted);
                 return Ok(plugin);
             }
             catch (Exception ex)
@@ -61,8 +68,59 @@ namespace Cs2Admin.API.Controllers
         {
             try
             {
-                var plugin = await _pluginService.UploadChunkAsync(id, file, chunkIndex, totalChunks, HttpContext.RequestAborted);
+                var plugin = await pluginService.UploadChunkAsync(id, file, chunkIndex, totalChunks, HttpContext.RequestAborted);
                 return Ok(plugin);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("{id}/files")]
+        public async Task<IActionResult> GetFiles(int id)
+        {
+            var tree = await pluginService.GetFileTreeAsync(id, HttpContext.RequestAborted);
+            if (tree == null) return NotFound();
+            return Ok(tree);
+        }
+
+        [HttpGet("{id}/file")]
+        public async Task<IActionResult> GetFileContent(int id, [FromQuery] string path)
+        {
+            try
+            {
+                var content = await pluginService.GetFileContentAsync(id, path, HttpContext.RequestAborted);
+                if (content == null) return NotFound();
+                return Ok(new { content });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpPost("{id}/file")]
+        public async Task<IActionResult> SaveFileContent(int id, [FromBody] FileEditRequest request)
+        {
+            try
+            {
+                await pluginService.SaveFileContentAsync(id, request.Path, request.Content, HttpContext.RequestAborted);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpDelete("{id}/file")]
+        public async Task<IActionResult> DeleteFile(int id, [FromQuery] string path)
+        {
+            try
+            {
+                await pluginService.DeleteFileAsync(id, path, HttpContext.RequestAborted);
+                return Ok();
             }
             catch (Exception ex)
             {
@@ -73,7 +131,7 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            await _pluginService.DeleteAsync(id, HttpContext.RequestAborted);
+            await pluginService.DeleteAsync(id, HttpContext.RequestAborted);
             return NoContent();
         }
     }

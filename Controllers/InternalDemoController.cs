@@ -4,22 +4,17 @@ using Cs2Admin.API.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
+using Cs2Admin.API.Infrastructure.Repositories;
 
 namespace Cs2Admin.API.Controllers;
 
 [ApiController]
 [Route("api/internal/demo-results")]
-public class InternalDemoController : ControllerBase
+public class InternalDemoController(
+    IMatchRepository matchRepository,
+    IMatchRoundTimelineRepository timelineRepository,
+    ILogger<InternalDemoController> logger) : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
-    private readonly ILogger<InternalDemoController> _logger;
-
-    public InternalDemoController(ApplicationDbContext context, ILogger<InternalDemoController> logger)
-    {
-        _context = context;
-        _logger = logger;
-    }
-
     [HttpPost("{matchId:int}")]
     public async Task<IActionResult> ReceiveDemoResults(int matchId, [FromBody] DemoResultPayload payload)
     {
@@ -30,7 +25,7 @@ public class InternalDemoController : ControllerBase
         {
             if (!Request.Headers.TryGetValue("X-Internal-Api-Key", out var providedKey) || providedKey != expectedKey)
             {
-                _logger.LogWarning("Unauthorized access attempt to InternalDemoController");
+                logger.LogWarning("Unauthorized access attempt to InternalDemoController");
                 return Unauthorized("Invalid API Key");
             }
         }
@@ -38,7 +33,7 @@ public class InternalDemoController : ControllerBase
         if (payload.MatchId != matchId)
             return BadRequest("MatchId mismatch");
 
-        var match = await _context.Matches.FindAsync(matchId);
+        var match = await matchRepository.GetByIdAsync(matchId);
         if (match == null) return NotFound("Match not found");
 
         var newTimelines = new List<MatchRoundTimeline>();
@@ -63,9 +58,9 @@ public class InternalDemoController : ControllerBase
             // Remove any rudimentary round_end records from MatchZy to avoid clutter, 
             // or we keep them to denote round ends alongside kills. 
             // For now, we just add the detailed kills.
-            _context.MatchRoundTimelines.AddRange(newTimelines);
-            await _context.SaveChangesAsync();
-            _logger.LogInformation("Saved {EventCount} detailed events for Match {MatchId} from Go Parser", newTimelines.Count, matchId);
+            await timelineRepository.AddRangeAsync(newTimelines);
+            await timelineRepository.SaveChangesAsync();
+            logger.LogInformation("Saved {EventCount} detailed events for Match {MatchId} from Go Parser", newTimelines.Count, matchId);
         }
 
         return Ok();

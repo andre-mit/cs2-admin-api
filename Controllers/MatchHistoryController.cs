@@ -7,14 +7,8 @@ namespace Cs2Admin.API.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/v1/history")]
-public class MatchHistoryController : ControllerBase
+public class MatchHistoryController(IMatchHistoryService historyService) : ControllerBase
 {
-    private readonly IMatchHistoryService _historyService;
-
-    public MatchHistoryController(IMatchHistoryService historyService)
-    {
-        _historyService = historyService;
-    }
 
     [HttpGet]
     public async Task<IActionResult> GetMatches([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
@@ -23,14 +17,14 @@ public class MatchHistoryController : ControllerBase
         if (string.IsNullOrEmpty(steamId))
             return Unauthorized();
 
-        var result = await _historyService.GetMatchesAsync(steamId, page, pageSize);
+        var result = await historyService.GetMatchesAsync(steamId, page, pageSize);
         return Ok(result);
     }
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetMatchDetail(int id)
     {
-        var result = await _historyService.GetMatchDetailAsync(id);
+        var result = await historyService.GetMatchDetailAsync(id);
         return result != null ? Ok(result) : NotFound();
     }
 }

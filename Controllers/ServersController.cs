@@ -10,13 +10,15 @@ using Microsoft.EntityFrameworkCore;
 
 using Microsoft.AspNetCore.Authorization;
 
+using Cs2Admin.API.Infrastructure.Repositories;
 namespace Cs2Admin.API.Controllers
 {
     [Authorize]
     [ApiController]
     [Route("api/v1/[controller]")]
     public class ServersController(
-        ApplicationDbContext context,
+        IServerRepository serverRepository,
+        ApplicationDbContext context, // Temporarily keeping for complex queries
         IRconService rconService,
         IServerService serverService,
         IConfiguration configuration,
@@ -28,13 +30,14 @@ namespace Cs2Admin.API.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Server>>> GetServers()
         {
-            return await context.Servers.OrderByDescending(s => s.CreatedAt).ToListAsync();
+            var servers = await serverRepository.GetServersOrderByDescendingAsync();
+            return Ok(servers);
         }
 
         [HttpGet("{id:int}")]
         public async Task<ActionResult<Server>> GetServer(int id)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
 
             if (server == null)
             {
@@ -47,7 +50,7 @@ namespace Cs2Admin.API.Controllers
         [HttpGet("{id:int}/status")]
         public async Task<IActionResult> GetServerStatus(int id)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null) return NotFound();
 
             try
@@ -69,8 +72,8 @@ namespace Cs2Admin.API.Controllers
         [HttpPost]
         public async Task<ActionResult<Server>> CreateServer(Server server)
         {
-            context.Servers.Add(server);
-            await context.SaveChangesAsync();
+            await serverRepository.AddAsync(server);
+            await serverRepository.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, server);
         }
@@ -148,7 +151,7 @@ namespace Cs2Admin.API.Controllers
         [HttpPost("{id:int}/start")]
         public async Task<IActionResult> StartServer(int id, CancellationToken cancellationToken)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be started via this endpoint.");
@@ -163,7 +166,7 @@ namespace Cs2Admin.API.Controllers
         [HttpPost("{id}/stop")]
         public async Task<IActionResult> StopServer(int id, CancellationToken cancellationToken)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be stopped via this endpoint.");
@@ -178,7 +181,7 @@ namespace Cs2Admin.API.Controllers
         [HttpPost("{id}/restart")]
         public async Task<IActionResult> RestartServer(int id, CancellationToken cancellationToken)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be restarted via this endpoint.");
@@ -193,15 +196,15 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}/dynamic")]
         public async Task<IActionResult> DeleteDynamicServer(int id, CancellationToken cancellationToken)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null) return NotFound();
             if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
                 return BadRequest("Only dynamic servers can be deleted via this endpoint.");
 
             await serverService.DeleteServerAsync(server.ContainerId, cancellationToken);
 
-            context.Servers.Remove(server);
-            await context.SaveChangesAsync(cancellationToken);
+            serverRepository.Remove(server);
+            await serverRepository.SaveChangesAsync();
 
             return NoContent();
         }
@@ -214,15 +217,15 @@ namespace Cs2Admin.API.Controllers
                 return BadRequest();
             }
 
-            context.Entry(server).State = EntityState.Modified;
+            serverRepository.Update(server);
 
             try
             {
-                await context.SaveChangesAsync();
+                await serverRepository.SaveChangesAsync();
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!ServerExists(id))
+                if (!await ServerExistsAsync(id))
                 {
                     return NotFound();
                 }
@@ -238,14 +241,14 @@ namespace Cs2Admin.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteServer(int id)
         {
-            var server = await context.Servers.FindAsync(id);
+            var server = await serverRepository.GetByIdAsync(id);
             if (server == null)
             {
                 return NotFound();
             }
 
-            context.Servers.Remove(server);
-            await context.SaveChangesAsync();
+            serverRepository.Remove(server);
+            await serverRepository.SaveChangesAsync();
 
             return NoContent();
         }
@@ -347,9 +350,9 @@ namespace Cs2Admin.API.Controllers
             }
         }
 
-        private bool ServerExists(int id)
+        private async Task<bool> ServerExistsAsync(int id)
         {
-            return context.Servers.Any(e => e.Id == id);
+            return await serverRepository.ExistsAsync(e => e.Id == id);
         }
     }
 }
