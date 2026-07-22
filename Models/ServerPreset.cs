@@ -15,6 +15,10 @@ namespace Cs2Admin.API.Models
 
         public string? Description { get; set; }
 
+        public string? CustomCfg { get; set; }
+
+        public string? CustomCfgName { get; set; }
+
         // JSON string containing Dictionary<string, string> of CVARs
         public string ServerVariablesJson { get; set; } = "{}";
 

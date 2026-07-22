@@ -23,6 +23,8 @@ namespace Cs2Admin.API.Controllers
                 Id = p.Id,
                 Name = p.Name,
                 Description = p.Description,
+                CustomCfg = p.CustomCfg,
+                CustomCfgName = p.CustomCfgName,
                 ServerVariables = p.ServerVariables,
                 PluginIds = p.PluginIds
             }));
@@ -43,6 +45,8 @@ namespace Cs2Admin.API.Controllers
                 Id = preset.Id,
                 Name = preset.Name,
                 Description = preset.Description,
+                CustomCfg = preset.CustomCfg,
+                CustomCfgName = preset.CustomCfgName,
                 ServerVariables = preset.ServerVariables,
                 PluginIds = preset.PluginIds
             };
@@ -55,6 +59,8 @@ namespace Cs2Admin.API.Controllers
             {
                 Name = dto.Name,
                 Description = dto.Description,
+                CustomCfg = dto.CustomCfg,
+                CustomCfgName = dto.CustomCfgName,
                 ServerVariables = dto.ServerVariables,
                 PluginIds = dto.PluginIds
             };
@@ -67,6 +73,8 @@ namespace Cs2Admin.API.Controllers
                 Id = preset.Id,
                 Name = preset.Name,
                 Description = preset.Description,
+                CustomCfg = preset.CustomCfg,
+                CustomCfgName = preset.CustomCfgName,
                 ServerVariables = preset.ServerVariables,
                 PluginIds = preset.PluginIds
             };
@@ -86,6 +94,8 @@ namespace Cs2Admin.API.Controllers
 
             preset.Name = dto.Name;
             preset.Description = dto.Description;
+            preset.CustomCfg = dto.CustomCfg;
+            preset.CustomCfgName = dto.CustomCfgName;
             preset.ServerVariables = dto.ServerVariables;
             preset.PluginIds = dto.PluginIds;
 

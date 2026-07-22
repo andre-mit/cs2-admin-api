@@ -7,6 +7,9 @@ public class ServerRequest
     public string? RconPassword { get; set; }
     public byte MaxPlayers { get; set; }
     
+    public string? CustomCfg { get; set; }
+    public string? CustomCfgName { get; set; }
+    
     public List<PluginSelectionItem> PluginSelections { get; set; } = [];
     public Dictionary<string, string> ServerVariables { get; set; } = new();
 }

@@ -373,6 +373,15 @@ public class ServerService(
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(serverRequest.CustomCfg))
+        {
+            var cfgName = string.IsNullOrWhiteSpace(serverRequest.CustomCfgName) ? "custom" : serverRequest.CustomCfgName.Trim();
+            if (cfgName.EndsWith(".cfg")) cfgName = cfgName[..^4];
+            
+            await File.WriteAllTextAsync(Path.Combine(cfgDir, $"{cfgName}.cfg"), serverRequest.CustomCfg, Encoding.UTF8, cancellationToken);
+            sb.AppendLine($"exec {cfgName}.cfg");
+        }
+
         await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Encoding.UTF8, cancellationToken);
 
         await GeneratePreShAsync(instanceUpperPath, cancellationToken);
