@@ -21,6 +21,7 @@ namespace Cs2Admin.API.Controllers
         ApplicationDbContext context, // Temporarily keeping for complex queries
         IRconService rconService,
         IServerService serverService,
+        IServerEventService eventService,
         IConfiguration configuration,
         Cs2Admin.API.Services.BaseUpdateState baseUpdateState,
         IServiceScopeFactory scopeFactory,
@@ -46,6 +47,12 @@ namespace Cs2Admin.API.Controllers
             }
 
             return server;
+        }
+
+        [HttpGet("events")]
+        public async Task GetEvents(CancellationToken cancellationToken)
+        {
+            await eventService.RegisterClientAsync(Response, cancellationToken);
         }
 
         [HttpGet("{id:int}/status")]
@@ -202,6 +209,7 @@ namespace Cs2Admin.API.Controllers
             await serverRepository.AddAsync(server);
             await serverRepository.SaveChangesAsync();
 
+            await eventService.BroadcastEventAsync("server_list_changed", new { });
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, server);
         }
 
@@ -269,6 +277,7 @@ namespace Cs2Admin.API.Controllers
                 await context.SaveChangesAsync(cancellationToken);
             }
 
+            await eventService.BroadcastEventAsync("server_list_changed", new { });
             return CreatedAtAction(nameof(GetServer), new { id = server.Id }, result);
         }
 
@@ -333,6 +342,8 @@ namespace Cs2Admin.API.Controllers
             serverRepository.Remove(server);
             await serverRepository.SaveChangesAsync();
 
+            await eventService.BroadcastEventAsync("server_list_changed", new { });
+
             return NoContent();
         }
 
@@ -376,6 +387,8 @@ namespace Cs2Admin.API.Controllers
 
             serverRepository.Remove(server);
             await serverRepository.SaveChangesAsync();
+
+            await eventService.BroadcastEventAsync("server_list_changed", new { });
 
             return NoContent();
         }

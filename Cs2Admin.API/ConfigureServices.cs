@@ -12,6 +12,9 @@ public static class ConfigureServices
     public static void AddServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHostedService<S3CleanupService>();
+        services.AddHostedService<ServerMonitorBackgroundService>();
+
+        services.AddSingleton<IServerEventService, ServerEventService>();
 
         services.AddSingleton<IMatchmakingService, MatchmakingWorker>();
         services.AddHostedService(sp => (MatchmakingWorker)sp.GetRequiredService<IMatchmakingService>());
