@@ -416,6 +416,9 @@ public class ServerService(
 
         await GeneratePreShAsync(instanceUpperPath, cancellationToken);
 
+        SetPermissionsRecursive(instanceUpperPath);
+        SetPermissionsRecursive(instanceWorkPath);
+
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
         logger.LogInformation("Creating Docker container {ContainerId}", containerId);
@@ -538,6 +541,30 @@ public class ServerService(
         {
             var newDestinationDir = Path.Combine(destinationDir, subDir.Name);
             CopyDirectory(subDir.FullName, newDestinationDir);
+        }
+    }
+
+    private static void SetPermissionsRecursive(string path)
+    {
+        try
+        {
+            var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "chmod",
+                    Arguments = $"-R 777 \"{path}\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+            process.Start();
+            process.WaitForExit();
+        }
+        catch (Exception ex)
+        {
+            // Ignore errors if chmod is not available (e.g. Windows)
         }
     }
 
