@@ -47,6 +47,7 @@ namespace Cs2Admin.API.Tests
 
         public ServersControllerIntegrationTests(WebApplicationFactory<Program> factory)
         {
+            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "Server=localhost;Database=dummy;Uid=root;Pwd=root;");
             _factory = factory;
         }
 
