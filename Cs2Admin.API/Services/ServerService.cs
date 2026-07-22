@@ -276,6 +276,12 @@ public class ServerService(
                         continue;
                     }
 
+                    if (!relativePath.StartsWith("game/csgo", StringComparison.OrdinalIgnoreCase) && 
+                        !relativePath.StartsWith("game\\csgo", StringComparison.OrdinalIgnoreCase))
+                    {
+                        relativePath = Path.Combine("game/csgo", relativePath);
+                    }
+
                     var merged = configFile.DefaultContent ?? JsonSerializer.SerializeToElement(new { });
                     var fullPath = Path.Combine(instanceUpperPath, relativePath);
                     var dir = Path.GetDirectoryName(fullPath);
