@@ -112,6 +112,36 @@ public class ServerService(
         logger.LogInformation("Waiting for update container to finish...");
         await dockerClient.Containers.WaitContainerAsync(containerResponse.ID, cancellationToken);
 
+        // Inject Metamod into base game gameinfo.gi natively
+        var gameInfoPath = Path.Combine(_serversConfiguration.GameBaseDir, "game", "csgo", "gameinfo.gi");
+        if (File.Exists(gameInfoPath))
+        {
+            logger.LogInformation("Verifying gameinfo.gi at {Path}...", gameInfoPath);
+            var lines = (await File.ReadAllLinesAsync(gameInfoPath, cancellationToken)).ToList();
+            if (!lines.Any(l => l.Contains("Game csgo/addons/metamod")))
+            {
+                var searchPathsIndex = lines.FindIndex(l => l.Contains("SearchPaths"));
+                if (searchPathsIndex != -1 && searchPathsIndex + 1 < lines.Count && lines[searchPathsIndex + 1].Contains("{"))
+                {
+                    lines.Insert(searchPathsIndex + 2, "\t\t\t\tGame csgo/addons/metamod");
+                    await File.WriteAllLinesAsync(gameInfoPath, lines, cancellationToken);
+                    logger.LogInformation("Injected Metamod into base game gameinfo.gi successfully.");
+                }
+                else
+                {
+                    logger.LogWarning("Could not find 'SearchPaths' block in gameinfo.gi to inject Metamod.");
+                }
+            }
+            else
+            {
+                logger.LogInformation("Metamod already injected in base game gameinfo.gi.");
+            }
+        }
+        else
+        {
+            logger.LogWarning("gameinfo.gi not found at {Path}. Metamod not injected.", gameInfoPath);
+        }
+
         baseUpdateState.Reset();
         logger.LogInformation("Base Server Update completed successfully.");
     }
@@ -656,7 +686,8 @@ public class ServerService(
             
             GAMEINFO="/home/steam/cs2-dedicated/game/csgo/gameinfo.gi"
             
-            # Programmatically inject metamod if not present
+            # Programmatically inject metamod if not present (Legacy - now handled in base game update)
+            # Keeping this for backward compatibility if base game wasn't updated via API
             if [ -f "$GAMEINFO" ]; then
                 if ! grep -q "Game csgo/addons/metamod" "$GAMEINFO"; then
                     echo "[pre.sh] Injecting Metamod into gameinfo.gi..."
