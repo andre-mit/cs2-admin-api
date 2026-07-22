@@ -15,6 +15,8 @@ using Xunit;
 using FluentAssertions;
 using Cs2Admin.API.Services.Interfaces;
 using Docker.DotNet;
+using Microsoft.Extensions.Configuration;
+using System.Collections.Generic;
 
 namespace Cs2Admin.API.Tests
 {
@@ -74,6 +76,14 @@ namespace Cs2Admin.API.Tests
                     // but for a quick route test, just replacing clients is often enough if DB is isolated.
                     services.AddSingleton(mockDockerClient.Object);
                     services.AddScoped(_ => mockRconService.Object);
+                });
+
+                builder.ConfigureAppConfiguration((context, config) =>
+                {
+                    config.AddInMemoryCollection(new[]
+                    {
+                        new KeyValuePair<string, string?>("ConnectionStrings:DefaultConnection", "Server=localhost;Database=dummy;Uid=root;Pwd=root;")
+                    });
                 });
             }).CreateClient(new WebApplicationFactoryClientOptions
             {
