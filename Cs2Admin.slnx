@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Cs2Admin.API.Tests/Cs2Admin.API.Tests.csproj" />
+  <Project Path="Cs2Admin.API/Cs2Admin.API.csproj" />
+</Solution>

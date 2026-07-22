@@ -4,10 +4,10 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY ["Cs2Admin.API.csproj", "./"]
-RUN dotnet restore "Cs2Admin.API.csproj"
+COPY ["Cs2Admin.API/Cs2Admin.API.csproj", "Cs2Admin.API/"]
+RUN dotnet restore "Cs2Admin.API/Cs2Admin.API.csproj"
 COPY . .
-WORKDIR "/src/"
+WORKDIR "/src/Cs2Admin.API"
 RUN dotnet build "Cs2Admin.API.csproj" -c Release -o /app/build
 
 FROM build AS publish

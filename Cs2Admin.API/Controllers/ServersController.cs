@@ -24,6 +24,7 @@ namespace Cs2Admin.API.Controllers
         IConfiguration configuration,
         Cs2Admin.API.Services.BaseUpdateState baseUpdateState,
         IServiceScopeFactory scopeFactory,
+        Docker.DotNet.IDockerClient dockerClient,
         ILogger<ServersController> logger) : ControllerBase
     {
 
@@ -66,6 +67,132 @@ namespace Cs2Admin.API.Controllers
             catch
             {
                 return Ok(new { online = false, response = "" });
+            }
+        }
+
+        [HttpGet("{id:int}/health")]
+        public async Task<IActionResult> GetServerHealth(int id, CancellationToken cancellationToken)
+        {
+            var server = await serverRepository.GetByIdAsync(id);
+            if (server == null) return NotFound();
+
+            if (!server.IsDynamic || string.IsNullOrEmpty(server.ContainerId))
+            {
+                // For static servers, just ping RCON
+                try
+                {
+                    // Add timeout manually since IRconService doesn't accept one
+                    var rconTask = rconService.SendCommandAsync(server.IpString, server.Port, server.RconPassword ?? "", "status");
+                    if (await Task.WhenAny(rconTask, Task.Delay(2000, cancellationToken)) == rconTask)
+                    {
+                        await rconTask; // throw if failed
+                        return Ok(new { status = "online", isDynamic = false });
+                    }
+                    else
+                    {
+                        return Ok(new { status = "offline", isDynamic = false });
+                    }
+                }
+                catch
+                {
+                    return Ok(new { status = "offline", isDynamic = false });
+                }
+            }
+
+            // For dynamic servers, inspect container
+            try
+            {
+                var inspect = await dockerClient.Containers.InspectContainerAsync(server.ContainerId, cancellationToken);
+                var state = inspect.State.Status.ToLower(); // "running", "restarting", "exited", etc.
+
+                if (state == "running")
+                {
+                    // Check if RCON is reachable
+                    try
+                    {
+                        var rconTask = rconService.SendCommandAsync(server.IpString, server.Port, server.RconPassword ?? "", "status");
+                        if (await Task.WhenAny(rconTask, Task.Delay(2000, cancellationToken)) == rconTask)
+                        {
+                            await rconTask; // throw if failed
+                            return Ok(new { status = "online", isDynamic = true });
+                        }
+                        else
+                        {
+                            return Ok(new { status = "starting", isDynamic = true });
+                        }
+                    }
+                    catch
+                    {
+                        // Container is running but RCON failed. Likely starting up.
+                        return Ok(new { status = "starting", isDynamic = true });
+                    }
+                }
+                else if (state == "restarting")
+                {
+                    return Ok(new { status = "restarting", isDynamic = true });
+                }
+                else
+                {
+                    return Ok(new { status = "offline", isDynamic = true });
+                }
+            }
+            catch (Docker.DotNet.DockerContainerNotFoundException)
+            {
+                return Ok(new { status = "offline", isDynamic = true });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to inspect container {ContainerId}", server.ContainerId);
+                return StatusCode(500, new { message = "Failed to inspect container status." });
+            }
+        }
+
+        [HttpGet("{id:int}/logs")]
+        public async Task GetServerLogs(int id, CancellationToken cancellationToken)
+        {
+            var server = await serverRepository.GetByIdAsync(id);
+            if (server == null || string.IsNullOrEmpty(server.ContainerId))
+            {
+                Response.StatusCode = 404;
+                return;
+            }
+
+            Response.Headers.Append("Content-Type", "text/event-stream");
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("Connection", "keep-alive");
+
+            try
+            {
+                using var logStream = await dockerClient.Containers.GetContainerLogsAsync(server.ContainerId, false, new Docker.DotNet.Models.ContainerLogsParameters
+                {
+                    ShowStdout = true,
+                    ShowStderr = true,
+                    Follow = true,
+                    Tail = "50" // Return last 50 lines first
+                }, cancellationToken);
+
+                var buffer = new byte[8192];
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var result = await logStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (result.EOF) break;
+
+                    var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    // Log lines might contain multiple lines or incomplete lines depending on reading buffer, but SSE works well enough if we send raw text or JSON. 
+                    // Let's send as a JSON object per chunk.
+                    var data = System.Text.Json.JsonSerializer.Serialize(new { log = logLine });
+                    
+                    await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                // Client disconnected
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error streaming logs for container {ContainerId}", server.ContainerId);
             }
         }
 
