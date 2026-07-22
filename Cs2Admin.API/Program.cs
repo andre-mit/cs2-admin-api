@@ -118,19 +118,29 @@ builder.Services.AddCors(options =>
         });
 });
 
-var s3Config = new AmazonS3Config
+builder.Services.AddSingleton<IAmazonS3>(sp => 
 {
-    ServiceURL = builder.Configuration["S3:ServiceUrl"],
-    ForcePathStyle = true
-};
-builder.Services.AddSingleton<IAmazonS3>(new AmazonS3Client(
-    builder.Configuration["S3:AccessKey"],
-    builder.Configuration["S3:SecretKey"],
-    s3Config
-));
+    var config = sp.GetRequiredService<IConfiguration>();
+    var s3Config = new AmazonS3Config
+    {
+        ServiceURL = config["S3:ServiceUrl"] ?? "http://localhost:4566",
+        ForcePathStyle = true
+    };
+    return new AmazonS3Client(
+        config["S3:AccessKey"] ?? "test",
+        config["S3:SecretKey"] ?? "test",
+        s3Config
+    );
+});
 
-var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConn));
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp => 
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var redisConn = config["Redis:ConnectionString"] ?? "localhost:6379";
+    var options = ConfigurationOptions.Parse(redisConn);
+    options.AbortOnConnectFail = false;
+    return ConnectionMultiplexer.Connect(options);
+});
 
 builder.Services.AddSingleton<BaseUpdateState>();
 
