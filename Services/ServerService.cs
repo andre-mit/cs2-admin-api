@@ -660,7 +660,9 @@ public class ServerService(
             if [ -f "$GAMEINFO" ]; then
                 if ! grep -q "Game csgo/addons/metamod" "$GAMEINFO"; then
                     echo "[pre.sh] Injecting Metamod into gameinfo.gi..."
-                    sed -i '/Game_LowViolence csgo_lv/a \t\t\t\tGame csgo/addons/metamod' "$GAMEINFO"
+                    sed -i '/SearchPaths/,/{/ {
+                        /\{/ a \                    Game csgo/addons/metamod
+                    }' "$GAMEINFO"
                 fi
             fi
             
