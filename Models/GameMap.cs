@@ -8,5 +8,6 @@ namespace Cs2Admin.API.Models
         public bool IsCommunity { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
         public string? BadgeUrl { get; set; }
+        public List<string> Categories { get; set; } = new();
     }
 }
