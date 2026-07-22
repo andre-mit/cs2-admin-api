@@ -231,17 +231,18 @@ public class ServerService(
                 }
 
                 List<ConfigFileDefinition> configFiles = new();
+                var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 
                 if (!string.IsNullOrWhiteSpace(plugin.ConfigFilesJson))
                 {
-                    try { configFiles = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(plugin.ConfigFilesJson) ?? new(); } catch { }
+                    try { configFiles = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(plugin.ConfigFilesJson, jsonOptions) ?? new(); } catch { }
                 }
 
                 if (!string.IsNullOrWhiteSpace(selection.ConfigOverridesJson))
                 {
                     try
                     {
-                        var editedDefinitions = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(selection.ConfigOverridesJson);
+                        var editedDefinitions = JsonSerializer.Deserialize<List<ConfigFileDefinition>>(selection.ConfigOverridesJson, jsonOptions);
                         if (editedDefinitions != null && editedDefinitions.Count > 0)
                         {
                             configFiles = editedDefinitions;
@@ -251,7 +252,7 @@ public class ServerService(
                     {
                         try
                         {
-                            var overrides = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson) ?? new();
+                            var overrides = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selection.ConfigOverridesJson, jsonOptions) ?? new();
                             foreach (var file in configFiles)
                             {
                                 if (overrides.TryGetValue(file.Key, out var overrideElement))
@@ -286,6 +287,8 @@ public class ServerService(
                     var fullPath = Path.Combine(instanceUpperPath, relativePath);
                     var dir = Path.GetDirectoryName(fullPath);
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                    logger.LogInformation("Writing plugin config file {Key} for plugin {PluginName} to {Path}", configFile.Key, plugin.Name, fullPath);
 
                     if (configFile.Format.ToLower() == "cfg")
                     {
