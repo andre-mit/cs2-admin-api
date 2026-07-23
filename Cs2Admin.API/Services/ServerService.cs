@@ -183,6 +183,7 @@ public class ServerService(
         logger.LogInformation("Directories  created: [upper] {DirectoryUpper}, [work] {DirectoryWork}", instanceUpperPath, instanceWorkPath);
 
         bool fastDlRequired = false;
+        var vpkAddonNames = new List<string>();
         if (serverRequest.PluginSelections is { Count: > 0 })
         {
             var serializerOptions = new JsonSerializerOptions { WriteIndented = true };
@@ -244,6 +245,29 @@ public class ServerService(
                             {
                                 var fastDlCharactersModels = Path.Combine(_serversConfiguration.FastDlBaseDir, "characters/models");
                                 CopyDirectory(modelsSource, fastDlCharactersModels);
+                            }
+
+                            var vpkName = plugin.Name.ToLowerInvariant();
+                            var fastDlAddonsDir = Path.Combine(_serversConfiguration.FastDlBaseDir, "addons");
+                            Directory.CreateDirectory(fastDlAddonsDir);
+
+                            var fastDlVpkPath = Path.Combine(fastDlAddonsDir, $"{vpkName}.vpk");
+                            var instanceVpkPath = Path.Combine(instanceUpperPath, "game/csgo/addons", $"{vpkName}.vpk");
+
+                            try
+                            {
+                                logger.LogInformation("Generating VPK package for plugin {PluginName} at {VpkPath}", plugin.Name, fastDlVpkPath);
+                                VpkWriter.CreateFromDirectory(templatePluginPath, fastDlVpkPath);
+
+                                var instanceAddonsDir = Path.GetDirectoryName(instanceVpkPath);
+                                if (!string.IsNullOrEmpty(instanceAddonsDir)) Directory.CreateDirectory(instanceAddonsDir);
+                                File.Copy(fastDlVpkPath, instanceVpkPath, overwrite: true);
+
+                                vpkAddonNames.Add(vpkName);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogError(ex, "Failed to create VPK package for plugin {PluginName}", plugin.Name);
                             }
                         }
                     }
@@ -327,6 +351,34 @@ public class ServerService(
                         await File.WriteAllTextAsync(fullPath, JsonSerializer.Serialize(merged, serializerOptions), cancellationToken);
                     }
                 }
+            }
+
+            if (vpkAddonNames.Count > 0)
+            {
+                var multiAddonCfgPath = Path.Combine(instanceUpperPath, "game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg");
+                var multiAddonDir = Path.GetDirectoryName(multiAddonCfgPath);
+                if (!string.IsNullOrEmpty(multiAddonDir)) Directory.CreateDirectory(multiAddonDir);
+
+                var extraAddonsValue = string.Join(",", vpkAddonNames);
+                var lines = new List<string>
+                {
+                    $"mm_extra_addons \"{extraAddonsValue}\"",
+                    "mm_extra_addons_timeout \"60\"",
+                    "mm_addon_connection_timeout \"60\"",
+                    "mm_addon_mount_download \"1\"",
+                    "mm_cache_clients_with_addons \"1\"",
+                    "mm_block_disconnect_messages \"1\"",
+                    "mm_addon_debug \"1\""
+                };
+
+                if (!string.IsNullOrEmpty(_serversConfiguration.FastDlUrl))
+                {
+                    var fastDlUrl = _serversConfiguration.FastDlUrl.TrimEnd('/') + "/addons/";
+                    lines.Insert(1, $"mm_download_url \"{fastDlUrl}\"");
+                }
+
+                await File.WriteAllLinesAsync(multiAddonCfgPath, lines, cancellationToken);
+                logger.LogInformation("Generated MultiAddonManager configuration with extra_addons={Addons}", extraAddonsValue);
             }
         }
 
