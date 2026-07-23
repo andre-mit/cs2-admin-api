@@ -196,6 +196,20 @@ public class ServerService(
 
                 if (Directory.Exists(templatePluginPath))
                 {
+                    var zipFiles = Directory.GetFiles(templatePluginPath, "*.zip", SearchOption.TopDirectoryOnly);
+                    foreach (var zipPath in zipFiles)
+                    {
+                        try
+                        {
+                            logger.LogInformation("Extracting plugin asset zip {ZipPath} into template directory {TemplatePath}", zipPath, templatePluginPath);
+                            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, templatePluginPath, overwriteFiles: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Failed to extract zip file {ZipPath}", zipPath);
+                        }
+                    }
+
                     var subdirs = Directory.GetDirectories(templatePluginPath).Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     var structuralRoots = new[] { "addons", "cfg", "materials", "models", "sound" };
                     bool hasStructuralRoots = subdirs.Intersect(structuralRoots).Any();
@@ -427,6 +441,10 @@ public class ServerService(
 
         SetPermissionsRecursive(instanceUpperPath);
         SetPermissionsRecursive(instanceWorkPath);
+        if (Directory.Exists(_serversConfiguration.FastDlBaseDir))
+        {
+            SetPermissionsRecursive(_serversConfiguration.FastDlBaseDir);
+        }
 
         var envList = mergedEnvironment.Select(kvp => $"{kvp.Key}={kvp.Value}").ToList();
         var containerId = $"cs2-server-{token.Memo}";
