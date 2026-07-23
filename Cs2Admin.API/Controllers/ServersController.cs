@@ -175,31 +175,79 @@ namespace Cs2Admin.API.Controllers
                     ShowStdout = true,
                     ShowStderr = true,
                     Follow = true,
-                    Tail = "50" // Return last 50 lines first
+                    Tail = "200"
                 }, cancellationToken);
 
                 var buffer = new byte[8192];
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var result = await logStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
-                    if (result.EOF) break;
+                    if (result.EOF)
+                    {
+                        var pingData = System.Text.Json.JsonSerializer.Serialize(new { ping = true });
+                        await Response.WriteAsync($"data: {pingData}\n\n", cancellationToken);
+                        await Response.Body.FlushAsync(cancellationToken);
+                        await Task.Delay(2000, cancellationToken);
+                        continue;
+                    }
 
-                    var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    // Log lines might contain multiple lines or incomplete lines depending on reading buffer, but SSE works well enough if we send raw text or JSON. 
-                    // Let's send as a JSON object per chunk.
-                    var data = System.Text.Json.JsonSerializer.Serialize(new { log = logLine });
-                    
-                    await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
-                    await Response.Body.FlushAsync(cancellationToken);
+                    if (result.Count > 0)
+                    {
+                        var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                        var data = System.Text.Json.JsonSerializer.Serialize(new { log = logLine });
+                        await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                        await Response.Body.FlushAsync(cancellationToken);
+                    }
                 }
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // Client disconnected
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error streaming logs for container {ContainerId}", server.ContainerId);
+            }
+        }
+
+        [HttpGet("{id:int}/logs/download")]
+        public async Task<IActionResult> DownloadServerLogs(int id, CancellationToken cancellationToken)
+        {
+            var server = await serverRepository.GetByIdAsync(id);
+            if (server == null || string.IsNullOrEmpty(server.ContainerId))
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                using var logStream = await dockerClient.Containers.GetContainerLogsAsync(server.ContainerId, false, new Docker.DotNet.Models.ContainerLogsParameters
+                {
+                    ShowStdout = true,
+                    ShowStderr = true,
+                    Follow = false,
+                    Tail = "all"
+                }, cancellationToken);
+
+                using var ms = new System.IO.MemoryStream();
+                var buffer = new byte[8192];
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var result = await logStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (result.EOF) break;
+                    if (result.Count > 0)
+                    {
+                        await ms.WriteAsync(buffer.AsMemory(0, result.Count), cancellationToken);
+                    }
+                }
+
+                var logsBytes = ms.ToArray();
+                return File(logsBytes, "text/plain", $"server-{id}-logs.txt");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to download logs for container {ContainerId}", server.ContainerId);
+                return StatusCode(500, new { message = "Failed to retrieve logs." });
             }
         }
 

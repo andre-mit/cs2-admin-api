@@ -182,8 +182,6 @@ public class ServerService(
         
         logger.LogInformation("Directories  created: [upper] {DirectoryUpper}, [work] {DirectoryWork}", instanceUpperPath, instanceWorkPath);
 
-        bool fastDlRequired = false;
-        var vpkAddonNames = new List<string>();
         if (serverRequest.PluginSelections is { Count: > 0 })
         {
             var serializerOptions = new JsonSerializerOptions { WriteIndented = true };
@@ -197,20 +195,6 @@ public class ServerService(
 
                 if (Directory.Exists(templatePluginPath))
                 {
-                    var zipFiles = Directory.GetFiles(templatePluginPath, "*.zip", SearchOption.TopDirectoryOnly);
-                    foreach (var zipPath in zipFiles)
-                    {
-                        try
-                        {
-                            logger.LogInformation("Extracting plugin asset zip {ZipPath} into template directory {TemplatePath}", zipPath, templatePluginPath);
-                            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, templatePluginPath, overwriteFiles: true);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "Failed to extract zip file {ZipPath}", zipPath);
-                        }
-                    }
-
                     var subdirs = Directory.GetDirectories(templatePluginPath).Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     var structuralRoots = new[] { "addons", "cfg", "materials", "models", "sound" };
                     bool hasStructuralRoots = subdirs.Intersect(structuralRoots).Any();
@@ -219,60 +203,8 @@ public class ServerService(
                     {
                         var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo");
                         CopyDirectory(templatePluginPath, destinationPluginPath);
-
-                        var modelsSource = Path.Combine(templatePluginPath, "models");
-                        if (Directory.Exists(modelsSource))
-                        {
-                            var charactersModelsDest = Path.Combine(instanceUpperPath, "game/csgo/characters/models");
-                            CopyDirectory(modelsSource, charactersModelsDest);
-                        }
-                        
-                        if (subdirs.Contains("materials") || subdirs.Contains("models") || subdirs.Contains("sound"))
-                        {
-                            fastDlRequired = true;
-                            Directory.CreateDirectory(_serversConfiguration.FastDlBaseDir);
-                            
-                            foreach (var assetDir in new[] { "materials", "models", "sound" })
-                            {
-                                var assetSource = Path.Combine(templatePluginPath, assetDir);
-                                if (Directory.Exists(assetSource))
-                                {
-                                    CopyDirectory(assetSource, Path.Combine(_serversConfiguration.FastDlBaseDir, assetDir));
-                                }
-                            }
-
-                            if (Directory.Exists(modelsSource))
-                            {
-                                var fastDlCharactersModels = Path.Combine(_serversConfiguration.FastDlBaseDir, "characters/models");
-                                CopyDirectory(modelsSource, fastDlCharactersModels);
-                            }
-
-                            var rawVpkName = System.Text.RegularExpressions.Regex.Replace(plugin.Name.ToLowerInvariant(), @"[^a-z0-9_]", "_");
-                            var vpkName = System.Text.RegularExpressions.Regex.Replace(rawVpkName, @"_+", "_").Trim('_');
-                            var fastDlAddonsDir = Path.Combine(_serversConfiguration.FastDlBaseDir, "addons");
-                            Directory.CreateDirectory(fastDlAddonsDir);
-
-                            var fastDlVpkPath = Path.Combine(fastDlAddonsDir, $"{vpkName}.vpk");
-                            var instanceVpkPath = Path.Combine(instanceUpperPath, "game/csgo/addons", $"{vpkName}.vpk");
-
-                            try
-                            {
-                                logger.LogInformation("Generating VPK package for plugin {PluginName} at {VpkPath}", plugin.Name, fastDlVpkPath);
-                                VpkWriter.CreateFromDirectory(templatePluginPath, fastDlVpkPath);
-
-                                var instanceAddonsDir = Path.GetDirectoryName(instanceVpkPath);
-                                if (!string.IsNullOrEmpty(instanceAddonsDir)) Directory.CreateDirectory(instanceAddonsDir);
-                                File.Copy(fastDlVpkPath, instanceVpkPath, overwrite: true);
-
-                                vpkAddonNames.Add(vpkName);
-                            }
-                            catch (Exception ex)
-                            {
-                                logger.LogError(ex, "Failed to create VPK package for plugin {PluginName}", plugin.Name);
-                            }
-                        }
                     }
-                    else if (!plugin.Name.Equals("MultiAddonManager", StringComparison.OrdinalIgnoreCase))
+                    else
                     {
                         var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo/addons/counterstrikesharp/plugins", plugin.Name);
                         CopyDirectory(templatePluginPath, destinationPluginPath);
@@ -353,55 +285,6 @@ public class ServerService(
                     }
                 }
             }
-
-            if (vpkAddonNames.Count > 0)
-            {
-                var mamPluginPath = Path.Combine(_serversConfiguration.PluginsBaseDir, "MultiAddonManager");
-                if (Directory.Exists(mamPluginPath))
-                {
-                    var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo");
-                    CopyDirectory(mamPluginPath, destinationPluginPath);
-                    logger.LogInformation("MultiAddonManager Metamod plugin auto-injected into instance {InstanceMemo}", token.Memo);
-                }
-                else
-                {
-                    logger.LogWarning("MultiAddonManager plugin directory not found at {MamPath}", mamPluginPath);
-                }
-
-                var metamodDir = Path.Combine(instanceUpperPath, "game/csgo/addons/metamod");
-                Directory.CreateDirectory(metamodDir);
-                var vdfPath = Path.Combine(metamodDir, "multiaddonmanager.vdf");
-                if (!File.Exists(vdfPath))
-                {
-                    var vdfContent = "\"Metamod Plugin\"\n{\n\t\"alias\"\t\"multiaddonmanager\"\n\t\"file\"\t\"addons/multiaddonmanager/bin/multiaddonmanager\"\n}\n";
-                    await File.WriteAllTextAsync(vdfPath, vdfContent, cancellationToken);
-                }
-
-                var multiAddonCfgPath = Path.Combine(instanceUpperPath, "game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg");
-                var multiAddonDir = Path.GetDirectoryName(multiAddonCfgPath);
-                if (!string.IsNullOrEmpty(multiAddonDir)) Directory.CreateDirectory(multiAddonDir);
-
-                var extraAddonsValue = string.Join(",", vpkAddonNames);
-                var lines = new List<string>
-                {
-                    $"mm_extra_addons \"{extraAddonsValue}\"",
-                    "mm_extra_addons_timeout \"60\"",
-                    "mm_addon_connection_timeout \"60\"",
-                    "mm_addon_mount_download \"1\"",
-                    "mm_cache_clients_with_addons \"1\"",
-                    "mm_block_disconnect_messages \"1\"",
-                    "mm_addon_debug \"1\""
-                };
-
-                if (!string.IsNullOrEmpty(_serversConfiguration.FastDlUrl))
-                {
-                    var fastDlUrl = _serversConfiguration.FastDlUrl.TrimEnd('/') + "/addons/";
-                    lines.Insert(1, $"mm_download_url \"{fastDlUrl}\"");
-                }
-
-                await File.WriteAllLinesAsync(multiAddonCfgPath, lines, cancellationToken);
-                logger.LogInformation("Generated MultiAddonManager configuration with extra_addons={Addons}", extraAddonsValue);
-            }
         }
 
         var volumeName = $"cs2-vol-instance-{token.Memo}";
@@ -441,11 +324,15 @@ public class ServerService(
         
         mergedEnvironment["CS2_MAXPLAYERS"] = serverRequest.MaxPlayers.ToString();
         
-        string additionalArgs = "-tickrate 128";
-        if (fastDlRequired && !string.IsNullOrWhiteSpace(_serversConfiguration.FastDlUrl))
+        var additionalArgs = _serversConfiguration.DefaultEnvVariables.TryGetValue("CS2_ADDITIONAL_ARGS", out var defaultArgs) && !string.IsNullOrWhiteSpace(defaultArgs)
+            ? defaultArgs
+            : "-tickrate 128";
+
+        if (serverRequest.ServerVariables != null && serverRequest.ServerVariables.TryGetValue("CS2_ADDITIONAL_ARGS", out var customArgs) && !string.IsNullOrWhiteSpace(customArgs))
         {
-            additionalArgs += $" +sv_downloadurl \"{_serversConfiguration.FastDlUrl}\" +sv_allowdownload 1 +sv_allowupload 0";
+            additionalArgs = customArgs;
         }
+
         mergedEnvironment["CS2_ADDITIONAL_ARGS"] = additionalArgs;
 
         mergedEnvironment["CS2_PORT"] = ports.GamePort.ToString();
