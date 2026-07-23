@@ -247,7 +247,8 @@ public class ServerService(
                                 CopyDirectory(modelsSource, fastDlCharactersModels);
                             }
 
-                            var vpkName = plugin.Name.ToLowerInvariant();
+                            var rawVpkName = System.Text.RegularExpressions.Regex.Replace(plugin.Name.ToLowerInvariant(), @"[^a-z0-9_]", "_");
+                            var vpkName = System.Text.RegularExpressions.Regex.Replace(rawVpkName, @"_+", "_").Trim('_');
                             var fastDlAddonsDir = Path.Combine(_serversConfiguration.FastDlBaseDir, "addons");
                             Directory.CreateDirectory(fastDlAddonsDir);
 
@@ -271,7 +272,7 @@ public class ServerService(
                             }
                         }
                     }
-                    else
+                    else if (!plugin.Name.Equals("MultiAddonManager", StringComparison.OrdinalIgnoreCase))
                     {
                         var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo/addons/counterstrikesharp/plugins", plugin.Name);
                         CopyDirectory(templatePluginPath, destinationPluginPath);
@@ -355,6 +356,27 @@ public class ServerService(
 
             if (vpkAddonNames.Count > 0)
             {
+                var mamPluginPath = Path.Combine(_serversConfiguration.PluginsBaseDir, "MultiAddonManager");
+                if (Directory.Exists(mamPluginPath))
+                {
+                    var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo");
+                    CopyDirectory(mamPluginPath, destinationPluginPath);
+                    logger.LogInformation("MultiAddonManager Metamod plugin auto-injected into instance {InstanceMemo}", token.Memo);
+                }
+                else
+                {
+                    logger.LogWarning("MultiAddonManager plugin directory not found at {MamPath}", mamPluginPath);
+                }
+
+                var metamodDir = Path.Combine(instanceUpperPath, "game/csgo/addons/metamod");
+                Directory.CreateDirectory(metamodDir);
+                var vdfPath = Path.Combine(metamodDir, "multiaddonmanager.vdf");
+                if (!File.Exists(vdfPath))
+                {
+                    var vdfContent = "\"Metamod Plugin\"\n{\n\t\"alias\"\t\"multiaddonmanager\"\n\t\"file\"\t\"addons/multiaddonmanager/bin/multiaddonmanager\"\n}\n";
+                    await File.WriteAllTextAsync(vdfPath, vdfContent, cancellationToken);
+                }
+
                 var multiAddonCfgPath = Path.Combine(instanceUpperPath, "game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg");
                 var multiAddonDir = Path.GetDirectoryName(multiAddonCfgPath);
                 if (!string.IsNullOrEmpty(multiAddonDir)) Directory.CreateDirectory(multiAddonDir);
