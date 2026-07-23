@@ -218,6 +218,13 @@ public class ServerService(
                     {
                         var destinationPluginPath = Path.Combine(instanceUpperPath, "game/csgo");
                         CopyDirectory(templatePluginPath, destinationPluginPath);
+
+                        var modelsSource = Path.Combine(templatePluginPath, "models");
+                        if (Directory.Exists(modelsSource))
+                        {
+                            var charactersModelsDest = Path.Combine(instanceUpperPath, "game/csgo/characters/models");
+                            CopyDirectory(modelsSource, charactersModelsDest);
+                        }
                         
                         if (subdirs.Contains("materials") || subdirs.Contains("models") || subdirs.Contains("sound"))
                         {
@@ -231,6 +238,12 @@ public class ServerService(
                                 {
                                     CopyDirectory(assetSource, Path.Combine(_serversConfiguration.FastDlBaseDir, assetDir));
                                 }
+                            }
+
+                            if (Directory.Exists(modelsSource))
+                            {
+                                var fastDlCharactersModels = Path.Combine(_serversConfiguration.FastDlBaseDir, "characters/models");
+                                CopyDirectory(modelsSource, fastDlCharactersModels);
                             }
                         }
                     }
