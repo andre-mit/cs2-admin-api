@@ -23,6 +23,7 @@ public class ServerService(
     : IServerService
 {
     private readonly ServersConfiguration _serversConfiguration = serversConfigurationOptions.Value;
+    private static readonly Encoding Utf8WithoutBom = new UTF8Encoding(false);
 
     public async Task UpdateBaseServerAsync(CancellationToken cancellationToken = default)
     {
@@ -124,7 +125,7 @@ public class ServerService(
                 if (searchPathsIndex != -1 && searchPathsIndex + 1 < lines.Count && lines[searchPathsIndex + 1].Contains("{"))
                 {
                     lines.Insert(searchPathsIndex + 2, "\t\t\t\tGame csgo/addons/metamod");
-                    await File.WriteAllLinesAsync(gameInfoPath, lines, cancellationToken);
+                    await File.WriteAllLinesAsync(gameInfoPath, lines, Utf8WithoutBom, cancellationToken);
                     logger.LogInformation("Injected Metamod into base game gameinfo.gi successfully.");
                 }
                 else
@@ -277,11 +278,11 @@ public class ServerService(
                     if (configFile.Format.ToLower() == "cfg")
                     {
                         var cfgStr = WriteCfgFormat(merged);
-                        await File.WriteAllTextAsync(fullPath, cfgStr, Encoding.UTF8, cancellationToken);
+                        await File.WriteAllTextAsync(fullPath, cfgStr, Utf8WithoutBom, cancellationToken);
                     }
                     else
                     {
-                        await File.WriteAllTextAsync(fullPath, JsonSerializer.Serialize(merged, serializerOptions), cancellationToken);
+                        await File.WriteAllTextAsync(fullPath, JsonSerializer.Serialize(merged, serializerOptions), Utf8WithoutBom, cancellationToken);
                     }
                 }
             }
@@ -405,11 +406,11 @@ public class ServerService(
             var cfgName = string.IsNullOrWhiteSpace(serverRequest.CustomCfgName) ? "custom" : serverRequest.CustomCfgName.Trim();
             if (cfgName.EndsWith(".cfg")) cfgName = cfgName[..^4];
             
-            await File.WriteAllTextAsync(Path.Combine(cfgDir, $"{cfgName}.cfg"), serverRequest.CustomCfg, Encoding.UTF8, cancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(cfgDir, $"{cfgName}.cfg"), serverRequest.CustomCfg, Utf8WithoutBom, cancellationToken);
             sb.AppendLine($"exec {cfgName}.cfg");
         }
 
-        await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Encoding.UTF8, cancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(cfgDir, "server.cfg"), sb.ToString(), Utf8WithoutBom, cancellationToken);
 
         await GeneratePreShAsync(instanceUpperPath, cancellationToken);
 
@@ -726,7 +727,7 @@ public class ServerService(
             echo "[pre.sh] Initialization complete."
             """.Replace("\r\n", "\n");
 
-        await File.WriteAllTextAsync(preShPath, scriptContent, new UTF8Encoding(false), cancellationToken);
+        await File.WriteAllTextAsync(preShPath, scriptContent, Utf8WithoutBom, cancellationToken);
 
 #pragma warning disable CA1416
         // Apply execution permissions programmatically via .NET 7+ API

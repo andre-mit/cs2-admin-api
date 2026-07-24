@@ -257,7 +257,7 @@ namespace Cs2Admin.API.Services
                 Directory.CreateDirectory(dir);
             }
 
-            await File.WriteAllTextAsync(fullPath, content, ct);
+            await File.WriteAllTextAsync(fullPath, content, new System.Text.UTF8Encoding(false), ct);
         }
 
         public async Task DeleteFileAsync(int id, string path, CancellationToken ct = default)
