@@ -151,6 +151,7 @@ public class ServerService(
     {
         logger.LogInformation("Starting dynamic server creation...");
         var token = await steamTokenService.GetAvailableTokenAsync(cancellationToken);
+        if (token != null) token.Memo = SteamTokenService.SanitizeMemo(token.Memo);
         if (token == null)
         {
             logger.LogError("No available Steam tokens to create a new server instance.");
@@ -608,7 +609,7 @@ public class ServerService(
             RemoveVolumes = true
         }, cancellationToken);
 
-        var memo = containerId.Replace("cs2-server-", "");
+        var memo = SteamTokenService.SanitizeMemo(containerId.Replace("cs2-server-", ""));
         var volumeName = $"cs2-vol-instance-{memo}";
         
         try

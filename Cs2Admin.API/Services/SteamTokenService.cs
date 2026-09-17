@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Cs2Admin.API.Data;
 using Cs2Admin.API.Models;
 using Cs2Admin.API.Services.Interfaces;
@@ -7,12 +8,22 @@ namespace Cs2Admin.API.Services;
 
 public class SteamTokenService(ApplicationDbContext context) : ISteamTokenService
 {
+    public static string SanitizeMemo(string? memo)
+    {
+        if (string.IsNullOrWhiteSpace(memo)) return "instance";
+        var sanitized = Regex.Replace(memo.Trim(), @"[^a-zA-Z0-9_.-]", "-");
+        sanitized = Regex.Replace(sanitized, @"-+", "-");
+        sanitized = sanitized.Trim('-', '.', '_');
+        return string.IsNullOrEmpty(sanitized) ? "instance" : sanitized;
+    }
+
     public async Task<int> CreateTokenAsync(string memo, string token, CancellationToken ct)
     {
+        var safeMemo = SanitizeMemo(memo);
         var steamToken = new Models.SteamServerToken
         {
-            Memo = memo,
-            Token = token,
+            Memo = safeMemo,
+            Token = token.Trim(),
             IsAvailable = true
         };
 
@@ -55,7 +66,14 @@ public class SteamTokenService(ApplicationDbContext context) : ISteamTokenServic
 
     public async Task<bool> MarkTokenAsAvailableByMemoAsync(string memo, CancellationToken ct)
     {
-        var token = await context.SteamServerTokens.FirstOrDefaultAsync(t => t.Memo == memo, ct);
+        var safeMemo = SanitizeMemo(memo);
+        var token = await context.SteamServerTokens.FirstOrDefaultAsync(t => t.Memo == memo || t.Memo == safeMemo, ct);
+        if (token == null)
+        {
+            var allTokens = await context.SteamServerTokens.ToListAsync(ct);
+            token = allTokens.FirstOrDefault(t => SanitizeMemo(t.Memo) == safeMemo);
+        }
+
         if (token is not { IsAvailable: false })
         {
             return false;
@@ -68,6 +86,16 @@ public class SteamTokenService(ApplicationDbContext context) : ISteamTokenServic
     
     public async Task<SteamServerToken?> GetAvailableTokenAsync(CancellationToken ct)
     {
-        return await context.SteamServerTokens.FirstOrDefaultAsync(t => t.IsAvailable, ct);
+        var token = await context.SteamServerTokens.FirstOrDefaultAsync(t => t.IsAvailable, ct);
+        if (token != null)
+        {
+            var sanitized = SanitizeMemo(token.Memo);
+            if (token.Memo != sanitized)
+            {
+                token.Memo = sanitized;
+                await context.SaveChangesAsync(ct);
+            }
+        }
+        return token;
     }
 }
